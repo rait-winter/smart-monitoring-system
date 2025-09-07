@@ -1,0 +1,110 @@
+# FastAPI后端依赖配置 - 专家级智能预警系统
+# 基于Python 3.11的现代化微服务架构
+
+# ===== 核心Web框架 =====
+fastapi==0.104.1                    # 高性能异步Web框架
+uvicorn[standard]==0.24.0            # ASGI服务器，支持热重载
+pydantic==2.5.0                     # 数据验证和序列化
+pydantic-settings==2.1.0            # 设置管理
+
+# ===== 数据库与ORM =====
+sqlalchemy[asyncio]==2.0.23         # 异步ORM 2.0
+alembic==1.12.1                     # 数据库迁移工具
+asyncpg==0.29.0                     # PostgreSQL异步驱动
+psycopg2-binary==2.9.9              # PostgreSQL同步驱动
+
+# ===== 缓存与任务队列 =====
+redis[hiredis]==5.0.1                # Redis客户端，包含高性能C扩展
+celery[redis]==5.3.4                # 分布式任务队列
+flower==2.0.1                       # Celery监控工具
+
+# ===== Prometheus集成 =====
+prometheus-api-client==0.5.3        # Prometheus API客户端
+prometheus-client==0.19.0           # Prometheus指标导出
+prometheus-fastapi-instrumentator==6.1.0  # FastAPI自动监控
+
+# ===== AI/ML核心库 =====
+scikit-learn==1.3.2                 # 机器学习算法库
+pandas==2.1.4                       # 数据处理
+numpy==1.24.4                       # 科学计算
+scipy==1.11.4                       # 科学计算扩展
+statsmodels==0.14.0                 # 统计模型
+joblib==1.3.2                       # 模型序列化
+
+# ===== 时间序列分析 =====
+# prophet==1.1.4                    # Facebook时间序列预测（可选，需要额外编译）
+pmdarima==2.0.4                     # ARIMA模型自动调参
+seasonal-decompose==0.1.1            # 时间序列分解
+
+# ===== HTTP客户端 =====
+httpx==0.25.2                       # 异步HTTP客户端
+aiofiles==23.2.1                    # 异步文件操作
+python-multipart==0.0.6             # 文件上传支持
+
+# ===== 安全认证 =====
+python-jose[cryptography]==3.3.0    # JWT令牌处理
+passlib[bcrypt]==1.7.4               # 密码哈希
+cryptography==41.0.7                # 加密库
+
+# ===== 通知服务 =====
+slack-sdk==3.26.1                   # Slack官方SDK
+aiosmtplib==3.0.1                   # 异步邮件发送
+email-validator==2.1.0              # 邮件地址验证
+jinja2==3.1.2                       # 邮件模板引擎
+
+# ===== 规则引擎 =====
+rule-engine==4.5.0                  # Python规则引擎
+jsonschema==4.20.0                  # JSON架构验证
+
+# ===== 配置与环境 =====
+python-dotenv==1.0.0                # 环境变量加载
+dynaconf==3.2.4                     # 动态配置管理
+
+# ===== 日志与监控 =====
+structlog==23.2.0                   # 结构化日志
+loguru==0.7.2                       # 高级日志记录
+sentry-sdk[fastapi]==1.38.0         # 错误追踪
+
+# ===== 开发工具 =====
+pytest==7.4.3                       # 测试框架
+pytest-asyncio==0.21.1              # 异步测试支持
+pytest-cov==4.1.0                   # 测试覆盖率
+black==23.11.0                      # 代码格式化
+flake8==6.1.0                       # 代码检查
+mypy==1.7.1                         # 静态类型检查
+pre-commit==3.5.0                   # Git钩子管理
+
+# ===== 数据可视化 =====
+matplotlib==3.8.2                   # 基础绘图
+seaborn==0.13.0                     # 统计可视化
+plotly==5.17.0                      # 交互式图表
+
+# ===== 部署工具 =====
+gunicorn==21.2.0                    # WSGI服务器
+docker==6.1.3                       # Docker Python SDK
+
+# ===== 性能优化 =====
+orjson==3.9.10                      # 高性能JSON处理
+ujson==5.8.0                        # 快速JSON解析
+cachetools==5.3.2                   # 缓存工具
+
+# ===== 数据处理增强 =====
+polars==0.20.0                      # 高性能DataFrame库（Pandas替代）
+pyarrow==14.0.2                     # 列式存储格式
+h5py==3.10.0                        # HDF5文件处理
+
+# ===== 网络与协议 =====
+websockets==12.0                    # WebSocket支持
+aioredis==2.0.1                     # 异步Redis客户端
+
+# ===== 时间处理 =====
+pendulum==2.1.2                     # 现代时间处理库
+arrow==1.3.0                        # 时间处理辅助库
+
+# ===== 文档生成 =====
+# 注：FastAPI自动生成OpenAPI文档，无需额外依赖
+
+# ===== 可选：深度学习 =====
+# tensorflow==2.15.0                # 深度学习框架（按需安装）
+# torch==2.1.0                      # PyTorch（按需安装）
+# transformers==4.36.0              # Transformer模型（按需安装）
