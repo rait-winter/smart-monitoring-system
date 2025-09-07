@@ -1,44 +1,331 @@
-/* 全局样式文件 */
+/* 智能监控预警系统 - 全局样式 */
 
-/* 重置样式 */
+// 导入基础变量和混入
+@use './variables.scss' as *;
+@use './mixins.scss' as *;
+@use './responsive.scss' as *;
+
+// ======== 全局重置 ========
 * {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
+}
+
+html {
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
 }
 
 body {
-  font-family: 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  color: var(--el-text-color-primary);
+  background: var(--el-bg-color-page);
+  transition: background-color $transition-base ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* NProgress样式覆盖 */
+// ======== Element Plus 主题覆盖 ========
+:root {
+  // 主色覆盖
+  --el-color-primary: #{$primary-color};
+  --el-color-primary-light-3: #{$primary-light};
+  --el-color-primary-dark-2: #{$primary-dark};
+  
+  // 状态色覆盖
+  --el-color-success: #{$success-color};
+  --el-color-warning: #{$warning-color};
+  --el-color-danger: #{$danger-color};
+  --el-color-info: #{$info-color};
+  
+  // 布局覆盖
+  --monitor-header-height: #{$header-height};
+  --monitor-sidebar-width: #{$sidebar-width};
+  --monitor-sidebar-collapsed-width: #{$sidebar-collapsed-width};
+  
+  // 卡片覆盖
+  --el-card-padding: #{$monitor-card-padding};
+  --el-border-radius-base: #{$monitor-card-radius};
+}
+
+// 暗色主题支持
+.dark {
+  --el-bg-color-page: #{$dark-bg-primary};
+  --el-bg-color: #{$dark-bg-secondary};
+  --el-bg-color-overlay: #{$dark-bg-light};
+  
+  --el-text-color-primary: #{$dark-text-primary};
+  --el-text-color-regular: #{$dark-text-regular};
+  --el-text-color-secondary: #{$dark-text-secondary};
+  
+  --el-border-color: #{$dark-border-base};
+  --el-border-color-light: #{$dark-border-light};
+  --el-border-color-lighter: #{$dark-border-light};
+}
+
+// ======== 全局组件样式 ========
+
+// 卡片组件增强
+.el-card {
+  @include fade-in;
+  transition: all $transition-base ease;
+  
+  &:hover {
+    @include elevation(2);
+  }
+  
+  .el-card__header {
+    border-bottom: 1px solid var(--el-border-color-lighter);
+    
+    .card-header {
+      @include flex-between;
+      
+      h3, h4 {
+        @include flex-start;
+        gap: 8px;
+        margin: 0;
+        color: var(--el-text-color-primary);
+        
+        .el-icon {
+          color: var(--el-color-primary);
+        }
+      }
+    }
+  }
+}
+
+// 按钮组件增强
+.el-button {
+  transition: all $transition-fast ease;
+  
+  &.gradient-primary {
+    @include button-gradient($primary-color, $primary-light);
+  }
+  
+  &.gradient-success {
+    @include button-gradient($success-color, $success-light);
+  }
+  
+  &.action-button {
+    @include flex-center;
+    gap: 8px;
+    min-height: 40px;
+    font-weight: 500;
+    
+    .el-icon {
+      font-size: 16px;
+    }
+  }
+}
+
+// 表格组件增强
+.el-table {
+  @include scrollbar-style;
+  
+  &.monitor-table {
+    .el-table__header {
+      background: var(--el-fill-color-light);
+      
+      th {
+        background: transparent;
+        color: var(--el-text-color-primary);
+        font-weight: 600;
+      }
+    }
+    
+    .el-table__row {
+      &:hover {
+        background: var(--el-fill-color-lighter);
+      }
+      
+      &.status-success {
+        background: rgba($success-color, 0.05);
+      }
+      
+      &.status-warning {
+        background: rgba($warning-color, 0.05);
+      }
+      
+      &.status-danger {
+        background: rgba($danger-color, 0.05);
+      }
+    }
+  }
+}
+
+// ======== 监控系统专用组件 ========
+
+// 指标卡片
+.metric-card {
+  @include metric-card;
+  
+  .metric-header {
+    @include flex-between;
+    margin-bottom: $margin-md;
+    
+    .metric-title {
+      @include flex-start;
+      gap: 8px;
+      font-weight: 500;
+      color: var(--el-text-color-primary);
+      
+      .metric-icon {
+        color: var(--el-color-primary);
+      }
+    }
+    
+    .metric-status {
+      &.status-success {
+        @include alert-badge('success');
+      }
+      
+      &.status-warning {
+        @include alert-badge('warning');
+      }
+      
+      &.status-danger {
+        @include alert-badge('danger');
+      }
+    }
+  }
+  
+  .metric-content {
+    text-align: center;
+    
+    .metric-value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin: $margin-sm 0;
+      background: linear-gradient(45deg, var(--el-color-primary), var(--el-color-primary-light-3));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .metric-label {
+      color: var(--el-text-color-secondary);
+      font-size: $font-size-sm;
+    }
+    
+    .metric-trend {
+      @include flex-center;
+      gap: 4px;
+      margin-top: $margin-sm;
+      font-size: $font-size-sm;
+      
+      &.trend-up {
+        color: $success-color;
+      }
+      
+      &.trend-down {
+        color: $danger-color;
+      }
+      
+      .trend-icon {
+        font-size: 14px;
+      }
+    }
+  }
+}
+
+// 状态指示器
+.status-indicator {
+  @include flex-start;
+  gap: 8px;
+  
+  .status-dot {
+    @include size(8px);
+    border-radius: $border-radius-circle;
+    
+    &.status-success {
+      background: $success-color;
+    }
+    
+    &.status-warning {
+      background: $warning-color;
+    }
+    
+    &.status-danger {
+      background: $danger-color;
+    }
+    
+    &.status-info {
+      background: $info-color;
+    }
+  }
+  
+  .status-text {
+    font-size: $font-size-sm;
+    color: var(--el-text-color-regular);
+  }
+}
+
+// NProgress 进度条样式
 #nprogress .bar {
-  background: #409eff !important;
+  background: var(--el-color-primary) !important;
+  height: 3px !important;
 }
 
 #nprogress .spinner-icon {
-  border-top-color: #409eff !important;
-  border-left-color: #409eff !important;
+  border-top-color: var(--el-color-primary) !important;
+  border-left-color: var(--el-color-primary) !important;
 }
 
-/* 自定义滚动条 */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+// ======== 自定义滚动条 ========
+
+// 全局滚动条样式
+body {
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--el-fill-color-lighter);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--el-fill-color-dark);
+    border-radius: 4px;
+    transition: background $transition-fast ease;
+
+    &:hover {
+      background: var(--el-color-primary);
+    }
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: var(--el-fill-color-lighter);
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
+// 可滚动容器样式
+.scrollable {
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
 
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
+  &::-webkit-scrollbar-track {
+    background: var(--el-fill-color-lighter);
+    border-radius: 4px;
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  &::-webkit-scrollbar-thumb {
+    background: var(--el-fill-color-dark);
+    border-radius: 4px;
+    transition: background $transition-fast ease;
+
+    &:hover {
+      background: var(--el-color-primary);
+    }
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: var(--el-fill-color-lighter);
+  }
 }

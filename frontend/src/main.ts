@@ -20,14 +20,17 @@ import '@/styles/index.scss'
 import App from './App.vue'
 import router from './router'
 
+// 状态管理
+import { setupStore } from '@/stores'
+
 // 全局组件和指令
-// import { registerGlobalComponents } from '@/components'
+import { registerGlobalComponents } from '@/components'
 
 // ECharts配置
-// import { setupECharts } from '@/utils/echarts'
+import { setupECharts } from '@/utils/echarts'
 
 // 错误处理
-// import '@/utils/errorHandler'
+import { setupErrorHandler } from '@/utils/errorHandler'
 
 // NProgress配置
 NProgress.configure({ 
@@ -40,19 +43,20 @@ async function bootstrap() {
   // 创建应用实例
   const app = createApp(App)
   
-  // 创建Pinia状态管理
-  const pinia = createPinia()
-  pinia.use(piniaPluginPersistedstate)
-  app.use(pinia)
+  // 设置状态管理
+  setupStore(app)
   
   // 注册路由
   app.use(router)
   
   // 注册全局组件
-  // registerGlobalComponents(app)
+  registerGlobalComponents(app)
   
   // 配置ECharts
-  // setupECharts(app)
+  setupECharts(app)
+  
+  // 设置错误处理
+  setupErrorHandler(app)
   
   // 挂载应用
   app.mount('#app')

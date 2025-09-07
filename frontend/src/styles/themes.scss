@@ -1,0 +1,268 @@
+/* 主题配置文件 - 智能监控预警系统 */
+
+// ======== 亮色主题（默认） ========
+$light-theme: (
+  // 基础颜色
+  'primary': #409eff,
+  'primary-light': #79bbff,
+  'primary-dark': #337ecc,
+  'primary-rgb': '64, 158, 255',
+  
+  // 状态颜色
+  'success': #67c23a,
+  'warning': #e6a23c,
+  'danger': #f56c6c,
+  'info': #909399,
+  
+  // 文本颜色
+  'text-primary': #303133,
+  'text-regular': #606266,
+  'text-secondary': #909399,
+  'text-placeholder': #a8abb2,
+  'text-disabled': #c0c4cc,
+  
+  // 背景颜色
+  'bg-page': #f0f2f5,
+  'bg-primary': #ffffff,
+  'bg-secondary': #f5f7fa,
+  'bg-light': #fafafa,
+  'bg-overlay': #ffffff,
+  
+  // 边框颜色
+  'border': #dcdfe6,
+  'border-light': #e4e7ed,
+  'border-lighter': #ebeef5,
+  'border-extra-light': #f2f6fc,
+  
+  // 填充颜色
+  'fill': #f0f2f5,
+  'fill-light': #f5f7fa,
+  'fill-lighter': #fafafa,
+  'fill-extra-light': #fafcff,
+  'fill-dark': #ebedf0,
+  'fill-darker': #e6e8eb,
+  'fill-blank': #ffffff,
+  
+  // 监控系统特定颜色
+  'monitor-success-bg': #e8f5e8,
+  'monitor-warning-bg': #fff3e0,
+  'monitor-danger-bg': #ffebee,
+  'monitor-info-bg': #e3f2fd,
+  
+  // 阴影
+  'box-shadow': '0 2px 4px rgba(0, 0, 0, 0.12), 0 0 6px rgba(0, 0, 0, 0.04)',
+  'box-shadow-light': '0 2px 8px rgba(0, 0, 0, 0.06)',
+  'box-shadow-base': '0 2px 8px rgba(0, 0, 0, 0.15)',
+  'box-shadow-dark': '0 4px 12px rgba(0, 0, 0, 0.15)'
+);
+
+// ======== 暗色主题 ========
+$dark-theme: (
+  // 基础颜色
+  'primary': #409eff,
+  'primary-light': #79bbff,
+  'primary-dark': #337ecc,
+  'primary-rgb': '64, 158, 255',
+  
+  // 状态颜色
+  'success': #67c23a,
+  'warning': #e6a23c,
+  'danger': #f56c6c,
+  'info': #909399,
+  
+  // 文本颜色
+  'text-primary': #e5eaf3,
+  'text-regular': #cfd3dc,
+  'text-secondary': #a3a6ad,
+  'text-placeholder': #8d9095,
+  'text-disabled': #6c6e72,
+  
+  // 背景颜色
+  'bg-page': #0a0a0a,
+  'bg-primary': #141414,
+  'bg-secondary': #1d1e1f,
+  'bg-light': #262727,
+  'bg-overlay': #1d1e1f,
+  
+  // 边框颜色
+  'border': #414243,
+  'border-light': #4c4d4f,
+  'border-lighter': #58585b,
+  'border-extra-light': #636466,
+  
+  // 填充颜色
+  'fill': #262727,
+  'fill-light': #1d1e1f,
+  'fill-lighter': #191a1b,
+  'fill-extra-light': #161718,
+  'fill-dark': #2b2c2d,
+  'fill-darker': #2f3031,
+  'fill-blank': #141414,
+  
+  // 监控系统特定颜色
+  'monitor-success-bg': 'rgba(103, 194, 58, 0.15)',
+  'monitor-warning-bg': 'rgba(230, 162, 60, 0.15)',
+  'monitor-danger-bg': 'rgba(245, 108, 108, 0.15)',
+  'monitor-info-bg': 'rgba(144, 147, 153, 0.15)',
+  
+  // 阴影
+  'box-shadow': '0 2px 4px rgba(0, 0, 0, 0.24), 0 0 6px rgba(0, 0, 0, 0.12)',
+  'box-shadow-light': '0 2px 8px rgba(0, 0, 0, 0.12)',
+  'box-shadow-base': '0 2px 8px rgba(0, 0, 0, 0.24)',
+  'box-shadow-dark': '0 4px 12px rgba(0, 0, 0, 0.24)'
+);
+
+// ======== 蓝色主题 ========
+$blue-theme: (
+  // 基础颜色
+  'primary': #1890ff,
+  'primary-light': #40a9ff,
+  'primary-dark': #096dd9,
+  'primary-rgb': '24, 144, 255',
+  
+  // 状态颜色
+  'success': #52c41a,
+  'warning': #faad14,
+  'danger': #ff4d4f,
+  'info': #13c2c2,
+  
+  // 继承亮色主题的其他属性
+  'text-primary': map-get($light-theme, 'text-primary'),
+  'text-regular': map-get($light-theme, 'text-regular'),
+  'text-secondary': map-get($light-theme, 'text-secondary'),
+  'text-placeholder': map-get($light-theme, 'text-placeholder'),
+  'text-disabled': map-get($light-theme, 'text-disabled'),
+  
+  'bg-page': map-get($light-theme, 'bg-page'),
+  'bg-primary': map-get($light-theme, 'bg-primary'),
+  'bg-secondary': map-get($light-theme, 'bg-secondary'),
+  'bg-light': map-get($light-theme, 'bg-light'),
+  'bg-overlay': map-get($light-theme, 'bg-overlay'),
+  
+  'border': map-get($light-theme, 'border'),
+  'border-light': map-get($light-theme, 'border-light'),
+  'border-lighter': map-get($light-theme, 'border-lighter'),
+  'border-extra-light': map-get($light-theme, 'border-extra-light'),
+  
+  'fill': map-get($light-theme, 'fill'),
+  'fill-light': map-get($light-theme, 'fill-light'),
+  'fill-lighter': map-get($light-theme, 'fill-lighter'),
+  'fill-extra-light': map-get($light-theme, 'fill-extra-light'),
+  'fill-dark': map-get($light-theme, 'fill-dark'),
+  'fill-darker': map-get($light-theme, 'fill-darker'),
+  'fill-blank': map-get($light-theme, 'fill-blank'),
+  
+  // 监控系统特定颜色
+  'monitor-success-bg': #f6ffed,
+  'monitor-warning-bg': #fffbe6,
+  'monitor-danger-bg': #fff2f0,
+  'monitor-info-bg': #e6fffb,
+  
+  'box-shadow': map-get($light-theme, 'box-shadow'),
+  'box-shadow-light': map-get($light-theme, 'box-shadow-light'),
+  'box-shadow-base': map-get($light-theme, 'box-shadow-base'),
+  'box-shadow-dark': map-get($light-theme, 'box-shadow-dark')
+);
+
+// ======== 绿色主题 ========
+$green-theme: (
+  // 基础颜色
+  'primary': #52c41a,
+  'primary-light': #73d13d,
+  'primary-dark': #389e0d,
+  'primary-rgb': '82, 196, 26',
+  
+  // 状态颜色
+  'success': #52c41a,
+  'warning': #faad14,
+  'danger': #ff4d4f,
+  'info': #722ed1,
+  
+  // 继承亮色主题的其他属性
+  'text-primary': map-get($light-theme, 'text-primary'),
+  'text-regular': map-get($light-theme, 'text-regular'),
+  'text-secondary': map-get($light-theme, 'text-secondary'),
+  'text-placeholder': map-get($light-theme, 'text-placeholder'),
+  'text-disabled': map-get($light-theme, 'text-disabled'),
+  
+  'bg-page': map-get($light-theme, 'bg-page'),
+  'bg-primary': map-get($light-theme, 'bg-primary'),
+  'bg-secondary': map-get($light-theme, 'bg-secondary'),
+  'bg-light': map-get($light-theme, 'bg-light'),
+  'bg-overlay': map-get($light-theme, 'bg-overlay'),
+  
+  'border': map-get($light-theme, 'border'),
+  'border-light': map-get($light-theme, 'border-light'),
+  'border-lighter': map-get($light-theme, 'border-lighter'),
+  'border-extra-light': map-get($light-theme, 'border-extra-light'),
+  
+  'fill': map-get($light-theme, 'fill'),
+  'fill-light': map-get($light-theme, 'fill-light'),
+  'fill-lighter': map-get($light-theme, 'fill-lighter'),
+  'fill-extra-light': map-get($light-theme, 'fill-extra-light'),
+  'fill-dark': map-get($light-theme, 'fill-dark'),
+  'fill-darker': map-get($light-theme, 'fill-darker'),
+  'fill-blank': map-get($light-theme, 'fill-blank'),
+  
+  // 监控系统特定颜色
+  'monitor-success-bg': #f6ffed,
+  'monitor-warning-bg': #fffbe6,
+  'monitor-danger-bg': #fff2f0,
+  'monitor-info-bg': #f9f0ff,
+  
+  'box-shadow': map-get($light-theme, 'box-shadow'),
+  'box-shadow-light': map-get($light-theme, 'box-shadow-light'),
+  'box-shadow-base': map-get($light-theme, 'box-shadow-base'),
+  'box-shadow-dark': map-get($light-theme, 'box-shadow-dark')
+);
+
+// ======== 主题映射 ========
+$themes: (
+  'light': $light-theme,
+  'dark': $dark-theme,
+  'blue': $blue-theme,
+  'green': $green-theme
+);
+
+// ======== 主题生成混入 ========
+@mixin theme-colors($theme-name) {
+  $theme: map-get($themes, $theme-name);
+  
+  @if $theme {
+    @each $key, $value in $theme {
+      --el-color-#{$key}: #{$value};
+      --monitor-#{$key}: #{$value};
+    }
+  }
+}
+
+// ======== 生成主题类 ========
+.theme-light {
+  @include theme-colors('light');
+}
+
+.theme-dark {
+  @include theme-colors('dark');
+}
+
+.theme-blue {
+  @include theme-colors('blue');
+}
+
+.theme-green {
+  @include theme-colors('green');
+}
+
+// ======== 主题切换动画 ========
+.theme-transition {
+  transition: 
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+// 应用到所有元素
+* {
+  @extend .theme-transition;
+}

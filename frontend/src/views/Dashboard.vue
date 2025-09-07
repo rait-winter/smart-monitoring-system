@@ -155,6 +155,84 @@
       </el-col>
     </el-row>
     
+    <!-- AI分析区域 -->
+    <el-card class="ai-analysis-card">
+      <template #header>
+        <div class="card-header">
+          <h3>
+            <el-icon><DataAnalysis /></el-icon>
+            AI智能分析
+          </h3>
+          <div class="header-actions">
+            <el-button 
+              type="primary" 
+              @click="startAIAnalysis"
+              :loading="isAnalyzing"
+              :disabled="!isAIConfigured"
+            >
+              {{ isAnalyzing ? '分析中...' : '开始分析' }}
+            </el-button>
+            <el-button 
+              size="small" 
+              @click="viewAnalysisHistory"
+            >
+              历史记录
+            </el-button>
+          </div>
+        </div>
+      </template>
+      
+      <div v-if="!isAIConfigured" class="ai-not-configured">
+        <el-empty description="AI分析服务未配置">
+          <el-button type="primary" @click="navigateTo('/system?tab=ai')">
+            去配置
+          </el-button>
+        </el-empty>
+      </div>
+      
+      <div v-else-if="currentAnalysis" class="analysis-result">
+        <div class="analysis-header">
+          <div class="analysis-info">
+            <h4>{{ currentAnalysis.summary }}</h4>
+            <div class="analysis-meta">
+              <el-tag :type="getSeverityType(currentAnalysis.severity)" size="small">
+                {{ getSeverityText(currentAnalysis.severity) }}
+              </el-tag>
+              <span class="confidence">置信度: {{ (currentAnalysis.confidence * 100).toFixed(1) }}%</span>
+              <span class="timestamp">{{ formatTime(currentAnalysis.timestamp) }}</span>
+            </div>
+          </div>
+          <el-button 
+            size="small" 
+            type="primary" 
+            @click="showAnalysisDetail = true"
+          >
+            查看详情
+          </el-button>
+        </div>
+        
+        <div class="insights-preview">
+          <h5>关键洞察：</h5>
+          <ul>
+            <li v-for="insight in currentAnalysis.insights.slice(0, 3)" :key="insight">
+              {{ insight }}
+            </li>
+          </ul>
+          <span v-if="currentAnalysis.insights.length > 3" class="more-insights">
+            还有 {{ currentAnalysis.insights.length - 3 }} 条洞察...
+          </span>
+        </div>
+      </div>
+      
+      <div v-else class="no-analysis">
+        <el-empty description="暂无分析结果">
+          <el-button type="primary" @click="startAIAnalysis" :loading="isAnalyzing">
+            开始首次分析
+          </el-button>
+        </el-empty>
+      </div>
+    </el-card>
+    
     <!-- 实时数据展示 -->
     <el-row :gutter="20" class="charts-row">
       <!-- 告警趋势图 -->
@@ -246,6 +324,55 @@
         </el-table-column>
       </el-table>
     </el-card>
+    
+    <!-- AI分析详情弹窗 -->
+    <el-dialog
+      v-model="showAnalysisDetail"
+      title="AI分析详情"
+      width="800px"
+    >
+      <div v-if="currentAnalysis" class="analysis-detail">
+        <div class="analysis-summary">
+          <h3>{{ currentAnalysis.summary }}</h3>
+          <div class="meta-info">
+            <el-tag :type="getSeverityType(currentAnalysis.severity)" size="large">
+              {{ getSeverityText(currentAnalysis.severity) }}
+            </el-tag>
+            <span class="confidence">置信度: {{ (currentAnalysis.confidence * 100).toFixed(1) }}%</span>
+            <span class="timestamp">{{ formatTime(currentAnalysis.timestamp) }}</span>
+          </div>
+        </div>
+        
+        <el-divider />
+        
+        <div class="insights-section">
+          <h4>🔍 关键洞察</h4>
+          <ul class="insights-list">
+            <li v-for="insight in currentAnalysis.insights" :key="insight">
+              {{ insight }}
+            </li>
+          </ul>
+        </div>
+        
+        <el-divider />
+        
+        <div class="recommendations-section">
+          <h4>💡 优化建议</h4>
+          <ol class="recommendations-list">
+            <li v-for="recommendation in currentAnalysis.recommendations" :key="recommendation">
+              {{ recommendation }}
+            </li>
+          </ol>
+        </div>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showAnalysisDetail = false">关闭</el-button>
+          <el-button type="primary" @click="exportAnalysisReport">导出报告</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -265,12 +392,38 @@ import {
   Bell,
   PieChart
 } from '@element-plus/icons-vue'
+import { useAIAnalysis } from '@/composables/useAIAnalysis'
+import { useConfigManager } from '@/composables/useConfigManager'
+import type { AnalysisResult } from '@/composables/useAIAnalysis'
 
 // 路由对象
 const router = useRouter()
 
+// AI分析hooks
+const {
+  isAnalyzing,
+  analysisHistory,
+  currentAnalysis,
+  quickAnalyzeMetrics,
+  fullSystemAnalysis,
+  exportAnalysis
+} = useAIAnalysis()
+
+// 配置管理hooks
+const {
+  isOllamaConfigured,
+  isPrometheusConfigured
+} = useConfigManager()
+
 // 响应式数据
 const statusLoading = ref(false)
+const refreshLoading = ref(false)
+const showAnalysisDetail = ref(false)
+
+// AI配置状态
+const isAIConfigured = computed(() => {
+  return isOllamaConfigured.value && isPrometheusConfigured.value
+})
 
 // 系统指标数据
 const metrics = ref({
@@ -414,6 +567,145 @@ const getAlertTypeColor = (type: string): string => {
 const handleAlert = (alert: any) => {
   ElMessage.info(`正在处理告警: ${alert.message}`)
   // 这里可以添加具体的告警处理逻辑
+}
+
+/**
+ * 刷新系统信息
+ */
+const refreshSystemInfo = async () => {
+  refreshLoading.value = true
+  try {
+    await Promise.all([
+      refreshSystemStatus(),
+      loadMetrics()
+    ])
+    ElMessage.success('系统信息已更新')
+  } catch (error) {
+    ElMessage.error('刷新失败，请稍后重试')
+  } finally {
+    refreshLoading.value = false
+  }
+}
+
+/**
+ * 系统备份
+ */
+const backupSystem = async () => {
+  try {
+    ElMessage.info('正在进行系统备份...')
+    // 这里调用备份API
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    ElMessage.success('系统备份完成')
+  } catch (error) {
+    ElMessage.error('备份失败，请稍后重试')
+  }
+}
+
+/**
+ * 加载指标数据
+ */
+const loadMetrics = async () => {
+  try {
+    // 模拟从API加载指标数据
+    await new Promise(resolve => setTimeout(resolve, 500))
+    metrics.value = {
+      totalMetrics: Math.floor(Math.random() * 50) + 100,
+      activeRules: Math.floor(Math.random() * 10) + 20,
+      alertsToday: Math.floor(Math.random() * 20) + 5,
+      anomalies: Math.floor(Math.random() * 15) + 3
+    }
+  } catch (error) {
+    console.error('加载指标数据失败:', error)
+  }
+}
+
+/**
+ * 开始AI分析
+ */
+const startAIAnalysis = async () => {
+  if (!isAIConfigured.value) {
+    ElMessage.warning('请先配置Ollama和Prometheus服务')
+    return
+  }
+
+  try {
+    // 获取当前系统指标进行分析
+    const metricsData = [
+      { name: 'cpu_usage', value: 75, threshold: 80 },
+      { name: 'memory_usage', value: 68, threshold: 85 },
+      { name: 'disk_usage', value: 45, threshold: 90 },
+      { name: 'network_latency', value: 120, threshold: 100 }
+    ]
+
+    await fullSystemAnalysis(['cpu', 'memory', 'disk', 'network'])
+    ElMessage.success('AI分析完成！')
+  } catch (error) {
+    console.error('AI分析失败:', error)
+    ElMessage.error('AI分析失败，请检查服务配置')
+  }
+}
+
+/**
+ * 查看分析历史
+ */
+const viewAnalysisHistory = () => {
+  if (analysisHistory.value.length === 0) {
+    ElMessage.info('暂无分析历史记录')
+    return
+  }
+  
+  // 导航到分析历史页面或显示历史弹窗
+  ElMessage.info('分析历史功能开发中...')
+}
+
+/**
+ * 获取严重程度类型
+ */
+const getSeverityType = (severity: string) => {
+  const typeMap: Record<string, string> = {
+    low: 'info',
+    medium: 'warning', 
+    high: 'warning',
+    critical: 'danger'
+  }
+  return typeMap[severity] || 'info'
+}
+
+/**
+ * 获取严重程度文本
+ */
+const getSeverityText = (severity: string) => {
+  const textMap: Record<string, string> = {
+    low: '低风险',
+    medium: '中等风险',
+    high: '高风险', 
+    critical: '严重风险'
+  }
+  return textMap[severity] || '未知'
+}
+
+/**
+ * 格式化时间
+ */
+const formatTime = (timestamp: string) => {
+  return new Date(timestamp).toLocaleString('zh-CN')
+}
+
+/**
+ * 导出分析报告
+ */
+const exportAnalysisReport = async () => {
+  if (!currentAnalysis.value) {
+    ElMessage.warning('没有可导出的分析结果')
+    return
+  }
+
+  try {
+    await exportAnalysis(currentAnalysis.value, 'json')
+    showAnalysisDetail.value = false
+  } catch (error) {
+    ElMessage.error('导出失败，请稍后重试')
+  }
 }
 
 // 生命周期钩子

@@ -1,0 +1,260 @@
+// ======== 响应式设计 SCSS 混入和工具类 ========
+
+// 引入 Sass 模块
+@use 'sass:map';
+
+// 断点定义
+$breakpoints: (
+  xs: 480px,
+  sm: 768px,
+  md: 1024px,
+  lg: 1280px,
+  xl: 1920px
+) !default;
+
+// ======== 媒体查询混入 ========
+
+// 最小宽度媒体查询
+@mixin media-up($size) {
+  @if map.has-key($breakpoints, $size) {
+    @media (min-width: map.get($breakpoints, $size)) {
+      @content;
+    }
+  } @else {
+    @media (min-width: $size) {
+      @content;
+    }
+  }
+}
+
+// 最大宽度媒体查询
+@mixin media-down($size) {
+  @if map.has-key($breakpoints, $size) {
+    @media (max-width: map.get($breakpoints, $size) - 1px) {
+      @content;
+    }
+  } @else {
+    @media (max-width: $size - 1px) {
+      @content;
+    }
+  }
+}
+
+// 范围媒体查询
+@mixin media-between($min, $max) {
+  $min-width: if(map.has-key($breakpoints, $min), map.get($breakpoints, $min), $min);
+  $max-width: if(map.has-key($breakpoints, $max), map.get($breakpoints, $max), $max);
+  
+  @media (min-width: $min-width) and (max-width: $max-width - 1px) {
+    @content;
+  }
+}
+
+// 精确断点媒体查询
+@mixin media-only($size) {
+  @if $size == xs {
+    @include media-down(sm) {
+      @content;
+    }
+  } @else if $size == sm {
+    @include media-between(sm, md) {
+      @content;
+    }
+  } @else if $size == md {
+    @include media-between(md, lg) {
+      @content;
+    }
+  } @else if $size == lg {
+    @include media-between(lg, xl) {
+      @content;
+    }
+  } @else if $size == xl {
+    @include media-up(xl) {
+      @content;
+    }
+  }
+}
+
+// ======== 响应式布局混入 ========
+
+// 响应式容器
+@mixin responsive-container($max-widths: (
+  sm: 540px,
+  md: 720px,
+  lg: 960px,
+  xl: 1140px
+)) {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--container-padding, 15px);
+  padding-right: var(--container-padding, 15px);
+  
+  @each $breakpoint, $max-width in $max-widths {
+    @include media-up($breakpoint) {
+      max-width: $max-width;
+    }
+  }
+}
+
+// 响应式网格
+@mixin responsive-grid($columns: (
+  xs: 1,
+  sm: 2,
+  md: 3,
+  lg: 4,
+  xl: 6
+), $gap: 1rem) {
+  display: grid;
+  gap: $gap;
+  
+  @each $breakpoint, $cols in $columns {
+    @include media-up($breakpoint) {
+      grid-template-columns: repeat($cols, 1fr);
+    }
+  }
+}
+
+// 响应式 Flexbox
+@mixin responsive-flex($directions: (
+  xs: column,
+  md: row
+), $gap: 1rem) {
+  display: flex;
+  gap: $gap;
+  
+  @each $breakpoint, $direction in $directions {
+    @include media-up($breakpoint) {
+      flex-direction: $direction;
+    }
+  }
+}
+
+// ======== 响应式字体 ========
+
+// 响应式字体大小
+@mixin responsive-font-size($sizes: (
+  xs: 14px,
+  sm: 16px,
+  md: 18px,
+  lg: 20px,
+  xl: 22px
+)) {
+  @each $breakpoint, $size in $sizes {
+    @include media-up($breakpoint) {
+      font-size: $size;
+    }
+  }
+}
+
+// 流体字体大小
+@mixin fluid-font-size($min-size, $max-size, $min-width: 320px, $max-width: 1200px) {
+  font-size: clamp(
+    #{$min-size},
+    #{$min-size} + #{strip-unit($max-size - $min-size)} * ((100vw - #{$min-width}) / #{strip-unit($max-width - $min-width)}),
+    #{$max-size}
+  );
+}
+
+// ======== 响应式间距 ========
+
+// 响应式内边距
+@mixin responsive-padding($paddings: (
+  xs: 0.5rem,
+  sm: 1rem,
+  md: 1.5rem,
+  lg: 2rem,
+  xl: 2.5rem
+)) {
+  @each $breakpoint, $padding in $paddings {
+    @include media-up($breakpoint) {
+      padding: $padding;
+    }
+  }
+}
+
+// 响应式外边距
+@mixin responsive-margin($margins: (
+  xs: 0.5rem,
+  sm: 1rem,
+  md: 1.5rem,
+  lg: 2rem,
+  xl: 2.5rem
+)) {
+  @each $breakpoint, $margin in $margins {
+    @include media-up($breakpoint) {
+      margin: $margin;
+    }
+  }
+}
+
+// ======== 工具函数 ========
+
+// 去除单位
+@function strip-unit($number) {
+  @if type-of($number) == 'number' and not unitless($number) {
+    @return $number / ($number * 0 + 1);
+  }
+  @return $number;
+}
+
+// 获取断点值
+@function get-breakpoint($name) {
+  @return map.get($breakpoints, $name);
+}
+
+// ======== 响应式工具类 ========
+
+// 显示/隐藏工具类
+@each $breakpoint in map.keys($breakpoints) {
+  .hidden-#{$breakpoint}-up {
+    @include media-up($breakpoint) {
+      display: none !important;
+    }
+  }
+  
+  .hidden-#{$breakpoint}-down {
+    @include media-down($breakpoint) {
+      display: none !important;
+    }
+  }
+  
+  .visible-#{$breakpoint}-up {
+    display: none !important;
+    
+    @include media-up($breakpoint) {
+      display: block !important;
+    }
+  }
+  
+  .visible-#{$breakpoint}-down {
+    display: none !important;
+    
+    @include media-down($breakpoint) {
+      display: block !important;
+    }
+  }
+}
+
+// 文本对齐工具类
+@each $breakpoint in map.keys($breakpoints) {
+  @include media-up($breakpoint) {
+    .text-#{$breakpoint}-left { text-align: left !important; }
+    .text-#{$breakpoint}-center { text-align: center !important; }
+    .text-#{$breakpoint}-right { text-align: right !important; }
+  }
+}
+
+// Flexbox 工具类
+@each $breakpoint in map.keys($breakpoints) {
+  @include media-up($breakpoint) {
+    .flex-#{$breakpoint}-row { flex-direction: row !important; }
+    .flex-#{$breakpoint}-column { flex-direction: column !important; }
+    .justify-#{$breakpoint}-start { justify-content: flex-start !important; }
+    .justify-#{$breakpoint}-center { justify-content: center !important; }
+    .justify-#{$breakpoint}-end { justify-content: flex-end !important; }
+    .align-#{$breakpoint}-start { align-items: flex-start !important; }
+    .align-#{$breakpoint}-center { align-items: center !important; }
+    .align-#{$breakpoint}-end { align-items: flex-end !important; }
+  }
+}

@@ -1,5 +1,9 @@
-/* SCSS混入 */
+/* SCSS混入 - 智能监控预警系统 */
+@use 'sass:map';
+@use 'sass:color';
+@use 'variables' as *;
 
+// ======== 布局混入 ========
 @mixin flex-center {
   display: flex;
   align-items: center;
@@ -10,4 +14,516 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+@mixin flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+@mixin flex-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+@mixin flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+@mixin flex-column-center {
+  @include flex-column;
+  align-items: center;
+  justify-content: center;
+}
+
+// ======== 响应式设计混入 ========
+
+// 断点定义
+$breakpoints: (
+  xs: 480px,
+  sm: 768px,
+  md: 992px,
+  lg: 1200px,
+  xl: 1920px
+) !default;
+
+// 响应式断点混入
+@mixin respond-to($breakpoint) {
+  @if map.has-key($breakpoints, $breakpoint) {
+    @media (max-width: map.get($breakpoints, $breakpoint)) {
+      @content;
+    }
+  } @else {
+    @media (max-width: $breakpoint) {
+      @content;
+    }
+  }
+}
+
+// 媒体查询混入
+@mixin media-down($size) {
+  @if map.has-key($breakpoints, $size) {
+    @media (max-width: map.get($breakpoints, $size) - 1px) {
+      @content;
+    }
+  } @else {
+    @media (max-width: $size - 1px) {
+      @content;
+    }
+  }
+}
+
+@mixin media-up($size) {
+  @if map.has-key($breakpoints, $size) {
+    @media (min-width: map.get($breakpoints, $size)) {
+      @content;
+    }
+  } @else {
+    @media (min-width: $size) {
+      @content;
+    }
+  }
+}
+
+// 安全区域适配
+@mixin safe-area-padding($sides: all) {
+  @if $sides == all {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  } @else if $sides == top {
+    padding-top: env(safe-area-inset-top);
+  } @else if $sides == bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  } @else if $sides == left {
+    padding-left: env(safe-area-inset-left);
+  } @else if $sides == right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+// ======== 卡片样式 ========
+@mixin card-style {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: $border-radius-lg;
+  box-shadow: $box-shadow-light;
+  padding: $padding-lg;
+  transition: all $transition-base ease;
+  
+  &:hover {
+    box-shadow: $box-shadow-base;
+  }
+}
+
+@mixin monitor-card {
+  @include card-style;
+  padding: $monitor-card-padding;
+  border-radius: $monitor-card-radius;
+  box-shadow: $monitor-card-shadow;
+}
+
+// ======== 按钮样式 ========
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: $border-radius-sm;
+  cursor: pointer;
+  transition: all $transition-fast ease;
+  text-decoration: none;
+  box-sizing: border-box;
+  outline: none;
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+@mixin button-gradient($color1, $color2) {
+  background: linear-gradient(135deg, $color1 0%, $color2 100%);
+  border: none;
+  color: white;
+  
+  &:hover {
+    background: linear-gradient(135deg, color.mix($color1, black, 95%) 0%, color.mix($color2, black, 95%) 100%);
+  }
+}
+
+// ======== 输入框样式 ========
+@mixin input-style {
+  width: 100%;
+  padding: $padding-sm $padding-md;
+  border: 1px solid var(--el-border-color);
+  border-radius: $border-radius-sm;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  transition: all $transition-fast ease;
+  
+  &:focus {
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba($primary-color, 0.2);
+  }
+  
+  &:disabled {
+    background: var(--el-disabled-bg-color);
+    color: var(--el-disabled-text-color);
+    cursor: not-allowed;
+  }
+}
+
+// ======== 阴影混入 ========
+@mixin shadow-light {
+  box-shadow: $box-shadow-light;
+}
+
+@mixin shadow-base {
+  box-shadow: $box-shadow-base;
+}
+
+@mixin shadow-dark {
+  box-shadow: $box-shadow-dark;
+}
+
+@mixin elevation($level: 1) {
+  @if $level == 1 {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  } @else if $level == 2 {
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
+  } @else if $level == 3 {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+  } @else if $level == 4 {
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+  } @else if $level == 5 {
+    box-shadow: 0 19px 38px rgba(0, 0, 0, 0.30), 0 15px 12px rgba(0, 0, 0, 0.22);
+  }
+}
+
+// ======== 尺寸混入 ========
+@mixin size($width, $height: $width) {
+  width: $width;
+  height: $height;
+}
+
+@mixin square($size) {
+  @include size($size);
+}
+
+@mixin circle($size) {
+  @include square($size);
+  border-radius: $border-radius-circle;
+}
+
+// ======== 定位混入 ========
+@mixin absolute-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@mixin absolute-full {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+@mixin fixed-full {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+// ======== 文本混入 ========
+@mixin text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin text-clamp($lines: 2) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: $lines;
+  overflow: hidden;
+}
+
+@mixin text-gradient($color1, $color2) {
+  background: linear-gradient(45deg, $color1, $color2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// ======== 动画混入 ========
+@mixin fade-in($duration: $transition-base) {
+  opacity: 0;
+  animation: fadeIn $duration ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@mixin slide-in-up($duration: $transition-base) {
+  transform: translateY(20px);
+  opacity: 0;
+  animation: slideInUp $duration ease forwards;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@mixin bounce-in($duration: 0.6s) {
+  animation: bounceIn $duration ease;
+}
+
+@keyframes bounceIn {
+  0%, 20%, 40%, 60%, 80%, 100% {
+    transition-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1.000);
+  }
+  0% {
+    opacity: 0;
+    transform: scale3d(0.3, 0.3, 0.3);
+  }
+  20% {
+    transform: scale3d(1.1, 1.1, 1.1);
+  }
+  40% {
+    transform: scale3d(0.9, 0.9, 0.9);
+  }
+  60% {
+    opacity: 1;
+    transform: scale3d(1.03, 1.03, 1.03);
+  }
+  80% {
+    transform: scale3d(0.97, 0.97, 0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+// 移动端优化混入
+@mixin mobile-touch-optimization {
+  // 触摸目标最小尺寸
+  min-height: 44px;
+  min-width: 44px;
+  
+  // 触摸反馈
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  
+  // 触摸滚动
+  -webkit-overflow-scrolling: touch;
+  
+  // 防止双击缩放
+  touch-action: manipulation;
+  
+  // 用户选择
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+// 移动端列表优化
+@mixin mobile-list-optimization {
+  // 触摸滚动
+  -webkit-overflow-scrolling: touch;
+  overflow-scrolling: touch;
+  
+  // 滚动条隐藏
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  
+  // 触摸反馈
+  & > li {
+    @include mobile-touch-optimization;
+  }
+}
+
+// 滚动条样式混入
+@mixin scrollbar-style {
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--el-fill-color-lighter);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--el-fill-color-dark);
+    border-radius: 4px;
+    transition: background $transition-fast ease;
+
+    &:hover {
+      background: var(--el-color-primary);
+    }
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: var(--el-fill-color-lighter);
+  }
+}
+@mixin status-indicator($color, $size: 8px) {
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -#{$size + 4px};
+    @include size($size);
+    background: $color;
+    border-radius: $border-radius-circle;
+    transform: translateY(-50%);
+  }
+}
+
+@mixin metric-card {
+  @include monitor-card;
+  text-align: center;
+  min-height: 120px;
+  
+  .metric-value {
+    font-size: $font-size-xxl;
+    font-weight: bold;
+    margin: $margin-sm 0;
+  }
+  
+  .metric-label {
+    color: var(--el-text-color-secondary);
+    font-size: $font-size-sm;
+  }
+}
+
+@mixin alert-badge($type: 'info') {
+  $color: $info-color;
+  $bg: $monitor-bg-info;
+  
+  @if $type == 'success' {
+    $color: $success-color;
+    $bg: $monitor-bg-success;
+  } @else if $type == 'warning' {
+    $color: $warning-color;
+    $bg: $monitor-bg-warning;
+  } @else if $type == 'danger' {
+    $color: $danger-color;
+    $bg: $monitor-bg-danger;
+  }
+  
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: $border-radius-sm;
+  background: $bg;
+  color: $color;
+  font-size: $font-size-sm;
+  font-weight: 500;
+}
+
+// ======== 响应式混入 ========
+@mixin respond-to($breakpoint) {
+  @if $breakpoint == xs {
+    @media (max-width: #{$breakpoint-xs - 1px}) {
+      @content;
+    }
+  }
+  @if $breakpoint == sm {
+    @media (min-width: $breakpoint-xs) and (max-width: #{$breakpoint-sm - 1px}) {
+      @content;
+    }
+  }
+  @if $breakpoint == md {
+    @media (min-width: $breakpoint-sm) and (max-width: #{$breakpoint-md - 1px}) {
+      @content;
+    }
+  }
+  @if $breakpoint == lg {
+    @media (min-width: $breakpoint-md) and (max-width: #{$breakpoint-lg - 1px}) {
+      @content;
+    }
+  }
+  @if $breakpoint == xl {
+    @media (min-width: $breakpoint-lg) {
+      @content;
+    }
+  }
+}
+
+// ======== 实用工具混入 ========
+@mixin clearfix {
+  &::after {
+    content: "";
+    display: table;
+    clear: both;
+  }
+}
+
+@mixin visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@mixin scrollbar-style {
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: var(--el-fill-color-lighter);
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: var(--el-border-color-dark);
+    border-radius: 3px;
+    
+    &:hover {
+      background: var(--el-border-color-darker);
+    }
+  }
+  
+  // Firefox
+  scrollbar-width: thin;
+  scrollbar-color: var(--el-border-color-dark) var(--el-fill-color-lighter);
 }
