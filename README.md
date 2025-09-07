@@ -28,7 +28,8 @@ smart-monitoring/
 ├── docs/                    # 📚 项目文档
 │   ├── architecture.md      # 架构设计文档
 │   ├── api.md              # API接口文档
-│   └── deployment.md       # 部署指南
+│   ├── deployment.md       # 部署指南
+│   └── github-setup.md     # GitHub上传指南
 ├── backend/                 # 🐍 Python后端服务
 │   ├── app/                # 主应用模块
 │   │   ├── api/            # API路由
@@ -83,8 +84,8 @@ smart-monitoring/
 
 1. **克隆项目**
    ```bash
-   git clone <repository>
-   cd smart-monitoring
+   git clone https://github.com/rait-winter/smart-monitoring-system.git
+   cd smart-monitoring-system
    ```
 
 2. **启动开发环境**
@@ -199,11 +200,19 @@ graph TB
 
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
+## 相关链接
+
+- 🔗 **GitHub仓库**: https://github.com/rait-winter/smart-monitoring-system
+- 📚 **项目文档**: [docs/](./docs/)
+- 🏗️ **架构设计**: [docs/architecture.md](./docs/architecture.md)
+- 🚀 **部署指南**: [docs/deployment.md](./docs/deployment.md)
+- 📋 **GitHub设置**: [docs/github-setup.md](./docs/github-setup.md)
+
 ## 技术支持
 
-- 📧 Email: support@smart-monitoring.com
-- 💬 Slack: #smart-monitoring
-- 📖 文档: https://docs.smart-monitoring.com
+- 📧 Issues: https://github.com/rait-winter/smart-monitoring-system/issues
+- 💡 Discussions: https://github.com/rait-winter/smart-monitoring-system/discussions
+- 📖 Wiki: https://github.com/rait-winter/smart-monitoring-system/wiki
 
 ---
 
