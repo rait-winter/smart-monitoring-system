@@ -36,6 +36,7 @@ from app.models.schemas import (
     RulesExecutionResponse,
     RuleOperator,
     AlertSeverity,
+    NotificationChannel,
     APIResponse
 )
 from app.services.prometheus_service import PrometheusService
@@ -353,4 +354,399 @@ class RuleEngine:
                         execution_time=datetime.now(),
                         duration_ms=0.0,
                         metadata={"error": str(e)}
-                    )\n                    results.append(error_result)\n            \n            # 更新统计信息\n            self.execution_stats[\"total_executions\"] += len(results)\n            self.execution_stats[\"successful_executions\"] += len([r for r in results if \"error\" not in r.metadata])\n            self.execution_stats[\"failed_executions\"] += len([r for r in results if \"error\" in r.metadata])\n            self.execution_stats[\"triggered_rules\"] += triggered_count\n            \n            execution_time = time.time() - execution_start\n            \n            # 生成执行摘要\n            execution_summary = {\n                \"execution_time\": round(execution_time, 3),\n                \"rules_executed\": len(results),\n                \"rules_triggered\": triggered_count,\n                \"alerts_sent\": alerts_sent,\n                \"success_rate\": len([r for r in results if \"error\" not in r.metadata]) / len(results) if results else 0,\n                \"average_rule_duration\": sum(r.duration_ms for r in results) / len(results) if results else 0\n            }\n            \n            self.logger.info(\n                \"批量规则执行完成\",\n                total_executed=len(results),\n                triggered_count=triggered_count,\n                execution_time=round(execution_time, 3)\n            )\n            \n            return RulesExecutionResponse(\n                success=True,\n                message=f\"成功执行{len(results)}个规则\",\n                results=results,\n                total_executed=len(results),\n                triggered_count=triggered_count,\n                alerts_sent=alerts_sent,\n                execution_summary=execution_summary\n            )\n            \n        except Exception as e:\n            execution_time = time.time() - execution_start\n            self.logger.error(\n                \"批量规则执行失败\",\n                error=str(e),\n                execution_time=round(execution_time, 3)\n            )\n            raise RuntimeError(f\"规则执行失败: {str(e)}\")\n    \n    \n    async def execute_rule(self, rule_id: int) -> RuleExecutionResult:\n        \"\"\"\n        执行单个规则\n        \n        Args:\n            rule_id: 规则ID\n            \n        Returns:\n            RuleExecutionResult: 规则执行结果\n        \"\"\"\n        execution_start = time.time()\n        \n        try:\n            if rule_id not in self.rules:\n                raise ValueError(f\"规则不存在: {rule_id}\")\n            \n            rule = self.rules[rule_id]\n            \n            if not rule.enabled:\n                return RuleExecutionResult(\n                    rule_id=rule_id,\n                    rule_name=rule.name,\n                    triggered=False,\n                    severity=rule.severity,\n                    message=\"规则已禁用\",\n                    conditions_met=0,\n                    total_conditions=len(rule.conditions),\n                    execution_time=datetime.now(),\n                    duration_ms=0.0,\n                    metadata={\"status\": \"disabled\"}\n                )\n            \n            # 检查冷却时间\n            if await self._is_in_cooldown(rule):\n                return RuleExecutionResult(\n                    rule_id=rule_id,\n                    rule_name=rule.name,\n                    triggered=False,\n                    severity=rule.severity,\n                    message=\"规则在冷却期内\",\n                    conditions_met=0,\n                    total_conditions=len(rule.conditions),\n                    execution_time=datetime.now(),\n                    duration_ms=0.0,\n                    metadata={\"status\": \"cooldown\"}\n                )\n            \n            self.logger.debug(\"开始执行规则\", rule_id=rule_id, rule_name=rule.name)\n            \n            # 评估所有条件\n            conditions_met = 0\n            condition_results = []\n            \n            for i, condition in enumerate(rule.conditions):\n                try:\n                    condition_met = await self._evaluate_condition(condition)\n                    condition_results.append({\n                        \"condition_index\": i,\n                        \"met\": condition_met,\n                        \"query\": condition.metric_query,\n                        \"operator\": condition.operator.value,\n                        \"threshold\": condition.threshold\n                    })\n                    \n                    if condition_met:\n                        conditions_met += 1\n                        \n                except Exception as e:\n                    self.logger.warning(\n                        \"条件评估失败\",\n                        rule_id=rule_id,\n                        condition_index=i,\n                        error=str(e)\n                    )\n                    condition_results.append({\n                        \"condition_index\": i,\n                        \"met\": False,\n                        \"error\": str(e)\n                    })\n            \n            # 判断规则是否触发（所有条件都必须满足）\n            triggered = conditions_met == len(rule.conditions) and conditions_met > 0\n            \n            # 生成执行消息\n            if triggered:\n                message = f\"规则触发：{conditions_met}/{len(rule.conditions)}个条件满足\"\n            else:\n                message = f\"规则未触发：仅{conditions_met}/{len(rule.conditions)}个条件满足\"\n            \n            # 更新规则统计\n            rule.execution_count += 1\n            rule.last_executed = datetime.now()\n            if triggered:\n                rule.triggered_count += 1\n            \n            execution_time = time.time() - execution_start\n            \n            result = RuleExecutionResult(\n                rule_id=rule_id,\n                rule_name=rule.name,\n                triggered=triggered,\n                severity=rule.severity,\n                message=message,\n                conditions_met=conditions_met,\n                total_conditions=len(rule.conditions),\n                execution_time=datetime.now(),\n                duration_ms=execution_time * 1000,\n                metadata={\n                    \"condition_results\": condition_results,\n                    \"tags\": rule.tags,\n                    \"notification_channels\": [ch.value for ch in rule.notification_channels]\n                }\n            )\n            \n            # 记录执行历史\n            self.execution_history.append(result)\n            \n            # 限制历史记录长度\n            if len(self.execution_history) > 1000:\n                self.execution_history = self.execution_history[-500:]\n            \n            self.logger.info(\n                \"规则执行完成\",\n                rule_id=rule_id,\n                rule_name=rule.name,\n                triggered=triggered,\n                conditions_met=conditions_met,\n                total_conditions=len(rule.conditions),\n                duration_ms=round(execution_time * 1000, 2)\n            )\n            \n            return result\n            \n        except Exception as e:\n            execution_time = time.time() - execution_start\n            self.logger.error(\n                \"规则执行失败\",\n                rule_id=rule_id,\n                error=str(e),\n                duration_ms=round(execution_time * 1000, 2)\n            )\n            raise RuntimeError(f\"规则执行失败: {str(e)}\")\n    \n    \n    async def _validate_rule_data(self, rule_data: InspectionRuleCreate) -> None:\n        \"\"\"\n        验证规则数据的有效性\n        \n        Args:\n            rule_data: 规则数据\n            \n        Raises:\n            ValueError: 验证失败时抛出异常\n        \"\"\"\n        if not rule_data.name.strip():\n            raise ValueError(\"规则名称不能为空\")\n        \n        if not rule_data.conditions:\n            raise ValueError(\"规则必须包含至少一个条件\")\n        \n        # 验证条件\n        for i, condition in enumerate(rule_data.conditions):\n            if not condition.metric_query.strip():\n                raise ValueError(f\"条件{i+1}的查询语句不能为空\")\n            \n            if condition.duration_minutes <= 0:\n                raise ValueError(f\"条件{i+1}的持续时间必须大于0\")\n        \n        # 验证冷却时间\n        if rule_data.cooldown_minutes <= 0:\n            raise ValueError(\"冷却时间必须大于0分钟\")\n    \n    \n    async def _is_in_cooldown(self, rule: InspectionRule) -> bool:\n        \"\"\"\n        检查规则是否在冷却期内\n        \n        Args:\n            rule: 规则对象\n            \n        Returns:\n            bool: True表示在冷却期内\n        \"\"\"\n        if rule.last_executed is None:\n            return False\n        \n        cooldown_period = timedelta(minutes=rule.cooldown_minutes)\n        time_since_last = datetime.now() - rule.last_executed\n        \n        return time_since_last < cooldown_period\n    \n    \n    async def _evaluate_condition(self, condition: RuleCondition) -> bool:\n        \"\"\"\n        评估单个规则条件\n        \n        Args:\n            condition: 规则条件\n            \n        Returns:\n            bool: 条件是否满足\n        \"\"\"\n        try:\n            # 查询Prometheus数据\n            end_time = datetime.now()\n            start_time = end_time - timedelta(minutes=condition.duration_minutes)\n            \n            metrics_response = await self.prometheus_service.query_range(\n                query=condition.metric_query,\n                start_time=start_time,\n                end_time=end_time,\n                step=\"1m\"\n            )\n            \n            if not metrics_response.data:\n                self.logger.warning(\n                    \"查询无数据\",\n                    query=condition.metric_query,\n                    start_time=start_time,\n                    end_time=end_time\n                )\n                return False\n            \n            # 获取最新的数据点值\n            latest_values = []\n            for time_series in metrics_response.data:\n                if time_series.values:\n                    latest_value = time_series.values[-1].value\n                    latest_values.append(latest_value)\n            \n            if not latest_values:\n                return False\n            \n            # 计算聚合值（这里使用平均值，可以根据需要调整）\n            aggregated_value = sum(latest_values) / len(latest_values)\n            \n            # 根据操作符判断条件\n            if condition.operator == RuleOperator.GREATER_THAN:\n                result = aggregated_value > condition.threshold\n            elif condition.operator == RuleOperator.LESS_THAN:\n                result = aggregated_value < condition.threshold\n            elif condition.operator == RuleOperator.GREATER_EQUAL:\n                result = aggregated_value >= condition.threshold\n            elif condition.operator == RuleOperator.LESS_EQUAL:\n                result = aggregated_value <= condition.threshold\n            elif condition.operator == RuleOperator.EQUAL:\n                result = abs(aggregated_value - condition.threshold) < 1e-6\n            elif condition.operator == RuleOperator.NOT_EQUAL:\n                result = abs(aggregated_value - condition.threshold) >= 1e-6\n            else:\n                raise ValueError(f\"不支持的操作符: {condition.operator}\")\n            \n            self.logger.debug(\n                \"条件评估完成\",\n                query=condition.metric_query,\n                value=round(aggregated_value, 3),\n                operator=condition.operator.value,\n                threshold=condition.threshold,\n                result=result\n            )\n            \n            return result\n            \n        except Exception as e:\n            self.logger.error(\n                \"条件评估失败\",\n                query=condition.metric_query,\n                error=str(e)\n            )\n            return False\n    \n    \n    async def get_execution_statistics(self) -> Dict[str, Any]:\n        \"\"\"\n        获取规则执行统计信息\n        \n        Returns:\n            Dict: 统计信息\n        \"\"\"\n        total_rules = len(self.rules)\n        enabled_rules = len([r for r in self.rules.values() if r.enabled])\n        \n        # 最近24小时的执行历史\n        recent_cutoff = datetime.now() - timedelta(hours=24)\n        recent_executions = [\n            result for result in self.execution_history\n            if result.execution_time >= recent_cutoff\n        ]\n        \n        return {\n            \"total_rules\": total_rules,\n            \"enabled_rules\": enabled_rules,\n            \"disabled_rules\": total_rules - enabled_rules,\n            \"execution_stats\": self.execution_stats.copy(),\n            \"recent_24h\": {\n                \"total_executions\": len(recent_executions),\n                \"triggered_executions\": len([r for r in recent_executions if r.triggered]),\n                \"average_duration_ms\": sum(r.duration_ms for r in recent_executions) / len(recent_executions) if recent_executions else 0,\n                \"success_rate\": len([r for r in recent_executions if \"error\" not in r.metadata]) / len(recent_executions) if recent_executions else 0\n            },\n            \"rule_severity_distribution\": {\n                severity.value: len([r for r in self.rules.values() if r.severity == severity])\n                for severity in AlertSeverity\n            }\n        }\n\n\n# 导出类\n__all__ = [\"RuleEngine\", \"RuleExecutionContext\", \"RuleExecutionStatus\"]
+                    )
+                    results.append(error_result)
+            
+            # 更新统计信息
+            self.execution_stats["total_executions"] += len(results)
+            self.execution_stats["successful_executions"] += len([r for r in results if "error" not in r.metadata])
+            self.execution_stats["failed_executions"] += len([r for r in results if "error" in r.metadata])
+            self.execution_stats["triggered_rules"] += triggered_count
+            
+            execution_time = time.time() - execution_start
+            
+            # 生成执行摘要
+            execution_summary = {
+                "execution_time": round(execution_time, 3),
+                "rules_executed": len(results),
+                "rules_triggered": triggered_count,
+                "alerts_sent": alerts_sent,
+                "success_rate": len([r for r in results if "error" not in r.metadata]) / len(results) if results else 0,
+                "average_rule_duration": sum(r.duration_ms for r in results) / len(results) if results else 0
+            }
+            
+            self.logger.info(
+                "批量规则执行完成",
+                total_executed=len(results),
+                triggered_count=triggered_count,
+                execution_time=round(execution_time, 3)
+            )
+            
+            return RulesExecutionResponse(
+                success=True,
+                message=f"成功执行{len(results)}个规则",
+                results=results,
+                total_executed=len(results),
+                triggered_count=triggered_count,
+                alerts_sent=alerts_sent,
+                execution_summary=execution_summary
+            )
+            
+        except Exception as e:
+            execution_time = time.time() - execution_start
+            self.logger.error(
+                "批量规则执行失败",
+                error=str(e),
+                execution_time=round(execution_time, 3)
+            )
+            raise RuntimeError(f"规则执行失败: {str(e)}")
+    
+    
+    async def execute_rule(self, rule_id: int) -> RuleExecutionResult:
+        """
+        执行单个规则
+        
+        Args:
+            rule_id: 规则ID
+            
+        Returns:
+            RuleExecutionResult: 规则执行结果
+        """
+        execution_start = time.time()
+        
+        try:
+            if rule_id not in self.rules:
+                raise ValueError(f"规则不存在: {rule_id}")
+            
+            rule = self.rules[rule_id]
+            
+            if not rule.enabled:
+                return RuleExecutionResult(
+                    rule_id=rule_id,
+                    rule_name=rule.name,
+                    triggered=False,
+                    severity=rule.severity,
+                    message="规则已禁用",
+                    conditions_met=0,
+                    total_conditions=len(rule.conditions),
+                    execution_time=datetime.now(),
+                    duration_ms=0.0,
+                    metadata={"status": "disabled"}
+                )
+            
+            # 检查冷却时间
+            if await self._is_in_cooldown(rule):
+                return RuleExecutionResult(
+                    rule_id=rule_id,
+                    rule_name=rule.name,
+                    triggered=False,
+                    severity=rule.severity,
+                    message="规则在冷却期内",
+                    conditions_met=0,
+                    total_conditions=len(rule.conditions),
+                    execution_time=datetime.now(),
+                    duration_ms=0.0,
+                    metadata={"status": "cooldown"}
+                )
+            
+            self.logger.debug("开始执行规则", rule_id=rule_id, rule_name=rule.name)
+            
+            # 评估所有条件
+            conditions_met = 0
+            condition_results = []
+            
+            for i, condition in enumerate(rule.conditions):
+                try:
+                    condition_met = await self._evaluate_condition(condition)
+                    condition_results.append({
+                        "condition_index": i,
+                        "met": condition_met,
+                        "query": condition.metric_query,
+                        "operator": condition.operator.value,
+                        "threshold": condition.threshold
+                    })
+                    
+                    if condition_met:
+                        conditions_met += 1
+                        
+                except Exception as e:
+                    self.logger.warning(
+                        "条件评估失败",
+                        rule_id=rule_id,
+                        condition_index=i,
+                        error=str(e)
+                    )
+                    condition_results.append({
+                        "condition_index": i,
+                        "met": False,
+                        "error": str(e)
+                    })
+            
+            # 判断规则是否触发（所有条件都必须满足）
+            triggered = conditions_met == len(rule.conditions) and conditions_met > 0
+            
+            # 生成执行消息
+            if triggered:
+                message = f"规则触发：{conditions_met}/{len(rule.conditions)}个条件满足"
+            else:
+                message = f"规则未触发：仅{conditions_met}/{len(rule.conditions)}个条件满足"
+            
+            # 更新规则统计
+            rule.execution_count += 1
+            rule.last_executed = datetime.now()
+            if triggered:
+                rule.triggered_count += 1
+            
+            execution_time = time.time() - execution_start
+            
+            result = RuleExecutionResult(
+                rule_id=rule_id,
+                rule_name=rule.name,
+                triggered=triggered,
+                severity=rule.severity,
+                message=message,
+                conditions_met=conditions_met,
+                total_conditions=len(rule.conditions),
+                execution_time=datetime.now(),
+                duration_ms=execution_time * 1000,
+                metadata={
+                    "condition_results": condition_results,
+                    "tags": rule.tags,
+                    "notification_channels": [ch.value for ch in rule.notification_channels]
+                }
+            )
+            
+            # 记录执行历史
+            self.execution_history.append(result)
+            
+            # 限制历史记录长度
+            if len(self.execution_history) > 1000:
+                self.execution_history = self.execution_history[-500:]
+            
+            self.logger.info(
+                "规则执行完成",
+                rule_id=rule_id,
+                rule_name=rule.name,
+                triggered=triggered,
+                conditions_met=conditions_met,
+                total_conditions=len(rule.conditions),
+                duration_ms=round(execution_time * 1000, 2)
+            )
+            
+            return result
+            
+        except Exception as e:
+            execution_time = time.time() - execution_start
+            self.logger.error(
+                "规则执行失败",
+                rule_id=rule_id,
+                error=str(e),
+                duration_ms=round(execution_time * 1000, 2)
+            )
+            raise RuntimeError(f"规则执行失败: {str(e)}")
+    
+    
+    async def _validate_rule_data(self, rule_data: InspectionRuleCreate) -> None:
+        """
+        验证规则数据的有效性
+        
+        Args:
+            rule_data: 规则数据
+            
+        Raises:
+            ValueError: 验证失败时抛出异常
+        """
+        if not rule_data.name.strip():
+            raise ValueError("规则名称不能为空")
+        
+        if not rule_data.conditions:
+            raise ValueError("规则必须包含至少一个条件")
+        
+        # 验证条件
+        for i, condition in enumerate(rule_data.conditions):
+            if not condition.metric_query.strip():
+                raise ValueError(f"条件{i+1}的查询语句不能为空")
+            
+            if condition.duration_minutes <= 0:
+                raise ValueError(f"条件{i+1}的持续时间必须大于0")
+            
+            # 验证操作符
+            if not isinstance(condition.operator, RuleOperator):
+                raise ValueError(f"条件{i+1}的操作符无效")
+            
+            # 验证阈值
+            if not isinstance(condition.threshold, (int, float)):
+                raise ValueError(f"条件{i+1}的阈值必须是数字")
+        
+        # 验证冷却时间
+        if rule_data.cooldown_minutes <= 0:
+            raise ValueError("冷却时间必须大于0分钟")
+        
+        # 验证严重程度
+        if not isinstance(rule_data.severity, AlertSeverity):
+            raise ValueError("严重程度无效")
+        
+        # 验证通知渠道
+        for channel in rule_data.notification_channels:
+            if not isinstance(channel, NotificationChannel):
+                raise ValueError(f"通知渠道{channel}无效")
+
+
+    async def _is_in_cooldown(self, rule: InspectionRule) -> bool:
+        """
+        检查规则是否在冷却期内
+        
+        Args:
+            rule: 规则对象
+            
+        Returns:
+            bool: True表示在冷却期内
+        """
+        if rule.last_executed is None:
+            return False
+        
+        cooldown_period = timedelta(minutes=rule.cooldown_minutes)
+        time_since_last = datetime.now() - rule.last_executed
+        
+        return time_since_last < cooldown_period
+
+
+    async def _evaluate_condition(self, condition: RuleCondition) -> bool:
+        """
+        评估单个规则条件
+        
+        Args:
+            condition: 规则条件
+            
+        Returns:
+            bool: 条件是否满足
+        """
+        try:
+            # 查询Prometheus数据
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=condition.duration_minutes)
+            
+            metrics_response = await self.prometheus_service.query_range(
+                query=condition.metric_query,
+                start_time=start_time,
+                end_time=end_time,
+                step="1m"
+            )
+            
+            if not metrics_response.data:
+                self.logger.warning(
+                    "查询无数据",
+                    query=condition.metric_query,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+                return False
+            
+            # 获取最新的数据点值
+            latest_values = []
+            for time_series in metrics_response.data:
+                if time_series.values:
+                    latest_value = time_series.values[-1].value
+                    latest_values.append(latest_value)
+            
+            if not latest_values:
+                return False
+            
+            # 计算聚合值（这里使用平均值，可以根据需要调整）
+            aggregated_value = sum(latest_values) / len(latest_values)
+            
+            # 根据操作符判断条件
+            if condition.operator == RuleOperator.GREATER_THAN:
+                result = aggregated_value > condition.threshold
+            elif condition.operator == RuleOperator.LESS_THAN:
+                result = aggregated_value < condition.threshold
+            elif condition.operator == RuleOperator.GREATER_EQUAL:
+                result = aggregated_value >= condition.threshold
+            elif condition.operator == RuleOperator.LESS_EQUAL:
+                result = aggregated_value <= condition.threshold
+            elif condition.operator == RuleOperator.EQUAL:
+                result = abs(aggregated_value - condition.threshold) < 1e-6
+            elif condition.operator == RuleOperator.NOT_EQUAL:
+                result = abs(aggregated_value - condition.threshold) >= 1e-6
+            else:
+                raise ValueError(f"不支持的操作符: {condition.operator}")
+            
+            self.logger.debug(
+                "条件评估完成",
+                query=condition.metric_query,
+                value=round(aggregated_value, 3),
+                operator=condition.operator.value,
+                threshold=condition.threshold,
+                result=result
+            )
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(
+                "条件评估失败",
+                query=condition.metric_query,
+                error=str(e)
+            )
+            return False
+
+
+    async def get_execution_statistics(self) -> Dict[str, Any]:
+        """
+        获取规则执行统计信息
+        
+        Returns:
+            Dict: 统计信息
+        """
+        total_rules = len(self.rules)
+        enabled_rules = len([r for r in self.rules.values() if r.enabled])
+        
+        # 最近24小时的执行历史
+        recent_cutoff = datetime.now() - timedelta(hours=24)
+        recent_executions = [
+            result for result in self.execution_history
+            if result.execution_time >= recent_cutoff
+        ]
+        
+        return {
+            "total_rules": total_rules,
+            "enabled_rules": enabled_rules,
+            "disabled_rules": total_rules - enabled_rules,
+            "execution_stats": self.execution_stats.copy(),
+            "recent_24h": {
+                "total_executions": len(recent_executions),
+                "triggered_executions": len([r for r in recent_executions if r.triggered]),
+                "average_duration_ms": sum(r.duration_ms for r in recent_executions) / len(recent_executions) if recent_executions else 0,
+                "success_rate": len([r for r in recent_executions if "error" not in r.metadata]) / len(recent_executions) if recent_executions else 0
+            },
+            "rule_severity_distribution": {
+                severity.value: len([r for r in self.rules.values() if r.severity == severity])
+                for severity in AlertSeverity
+            }
+        }
+
+
+    async def schedule_rule_execution(self) -> None:
+        """
+        调度规则执行
+        
+        定期执行启用的规则检查
+        """
+        while True:
+            try:
+                # 执行启用的规则
+                await self.execute_rules(enabled_only=True)
+                
+                # 等待下次执行
+                await asyncio.sleep(settings.RULES_CHECK_INTERVAL)
+                
+            except asyncio.CancelledError:
+                self.logger.info("规则调度执行被取消")
+                break
+            except Exception as e:
+                self.logger.error("规则调度执行异常", error=str(e))
+                await asyncio.sleep(60)  # 出错后等待1分钟再继续
+
+
+# 导出类
+__all__ = ["RuleEngine", "RuleExecutionContext", "RuleExecutionStatus"]

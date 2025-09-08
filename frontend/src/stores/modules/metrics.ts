@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Metric, MetricHistory, MetricQuery } from '@/types/global'
-import { ApiService } from '@/services/api'
+import { apiService } from '@/services/api'
 
 interface MetricsState {
   // 指标数据
@@ -155,7 +155,6 @@ export const useMetricsStore = defineStore('metrics', {
       this.error = null
       
       try {
-        const apiService = ApiService.getInstance()
         const response = await apiService.getMetrics(params)
         
         this.metrics = response.data || []
@@ -176,7 +175,6 @@ export const useMetricsStore = defineStore('metrics', {
      */
     async fetchMetricHistory(metricName: string, params?: any) {
       try {
-        const apiService = ApiService.getInstance()
         const response = await apiService.getMetricHistory(metricName, {
           ...this.queryConfig,
           ...params

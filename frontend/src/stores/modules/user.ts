@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { User, LoginCredentials } from '@/types/global'
-import { ApiService } from '@/services/api'
+import { apiService } from '@/services/api'
 
 interface UserState {
   user: User | null
@@ -64,7 +64,6 @@ export const useUserStore = defineStore('user', {
      */
     async login(credentials: LoginCredentials) {
       try {
-        const apiService = ApiService.getInstance()
         const response = await apiService.login(credentials)
         
         const { user, token, permissions } = response.data
@@ -92,7 +91,6 @@ export const useUserStore = defineStore('user', {
      */
     async logout() {
       try {
-        const apiService = ApiService.getInstance()
         await apiService.logout()
       } catch (error) {
         console.error('登出请求失败:', error)
@@ -118,7 +116,6 @@ export const useUserStore = defineStore('user', {
       }
 
       try {
-        const apiService = ApiService.getInstance()
         const response = await apiService.get('/user/profile')
         
         this.user = response.data.user

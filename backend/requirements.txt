@@ -12,9 +12,10 @@ sqlalchemy[asyncio]==2.0.23         # 异步ORM 2.0
 alembic==1.12.1                     # 数据库迁移工具
 asyncpg==0.29.0                     # PostgreSQL异步驱动
 psycopg2-binary==2.9.9              # PostgreSQL同步驱动
+aiosqlite==0.19.0                   # SQLite异步驱动
 
 # ===== 缓存与任务队列 =====
-redis[hiredis]==5.0.1                # Redis客户端，包含高性能C扩展
+redis==4.5.4                         # Redis客户端，兼容celery版本
 celery[redis]==5.3.4                # 分布式任务队列
 flower==2.0.1                       # Celery监控工具
 
@@ -24,17 +25,18 @@ prometheus-client==0.19.0           # Prometheus指标导出
 prometheus-fastapi-instrumentator==6.1.0  # FastAPI自动监控
 
 # ===== AI/ML核心库 =====
-scikit-learn==1.3.2                 # 机器学习算法库
-pandas==2.1.4                       # 数据处理
-numpy==1.24.4                       # 科学计算
-scipy==1.11.4                       # 科学计算扩展
+# 使用特定版本避免编译问题
+scikit-learn==1.3.0                 # 机器学习算法库
+pandas==2.1.3                       # 数据处理
+numpy==1.24.3                       # 科学计算
+scipy==1.11.3                       # 科学计算扩展
 statsmodels==0.14.0                 # 统计模型
 joblib==1.3.2                       # 模型序列化
 
 # ===== 时间序列分析 =====
-# prophet==1.1.4                    # Facebook时间序列预测（可选，需要额外编译）
+# 修复包名问题
+seasonal==0.3.1                     # 时间序列分解
 pmdarima==2.0.4                     # ARIMA模型自动调参
-seasonal-decompose==0.1.1            # 时间序列分解
 
 # ===== HTTP客户端 =====
 httpx==0.25.2                       # 异步HTTP客户端

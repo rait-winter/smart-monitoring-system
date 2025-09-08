@@ -1,6 +1,6 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ApiService } from '@/services/api'
+import { apiService } from '@/services/api'
 
 // 数据库配置接口
 export interface DatabaseConfig {
@@ -161,7 +161,7 @@ export function useDatabaseManager() {
   const testConnection = async (): Promise<boolean> => {
     connectionLoading.value = true
     try {
-      const result = await ApiService.checkDatabaseHealth()
+      const result = await apiService.checkDatabaseHealth()
       
       if (result.success) {
         isConnected.value = true
@@ -207,7 +207,7 @@ export function useDatabaseManager() {
         ai_analysis: inspectionData.aiAnalysis || false
       }
       
-      const result = await ApiService.saveInspectionData(data)
+      const result = await apiService.saveInspectionData(data)
       
       if (result.success) {
         ElMessage.success('巡检数据保存成功！')
@@ -241,7 +241,7 @@ export function useDatabaseManager() {
         tags: JSON.stringify(metric.tags || {})
       }))
       
-      const result = await ApiService.saveMetricsData({ metrics: batchData })
+      const result = await apiService.saveMetricsData({ metrics: batchData })
       
       if (result.success) {
         ElMessage.success(`成功保存 ${batchData.length} 条指标数据！`)
@@ -277,7 +277,7 @@ export function useDatabaseManager() {
         model_version: analysisData.modelVersion || 'unknown'
       }
       
-      const result = await ApiService.saveAnalysisResult(data)
+      const result = await apiService.saveAnalysisResult(data)
       
       if (result.success) {
         ElMessage.success('AI分析结果保存成功！')
@@ -309,7 +309,7 @@ export function useDatabaseManager() {
         ...options.dateRange
       }
       
-      const blob = await ApiService.exportDatabaseData(type, params)
+      const blob = await apiService.exportDatabaseData(type, params)
       
       // 创建下载链接
       const url = window.URL.createObjectURL(blob)
@@ -343,7 +343,7 @@ export function useDatabaseManager() {
     try {
       operationLoading.value = true
       
-      const result = await ApiService.backupDatabase()
+      const result = await apiService.backupDatabase()
       
       if (result.success) {
         ElMessage.success('数据库备份成功！')
@@ -366,7 +366,7 @@ export function useDatabaseManager() {
    */
   const queryInspectionData = async (params: any = {}) => {
     try {
-      const result = await ApiService.getInspectionData(params)
+      const result = await apiService.getInspectionData(params)
       return result.data || []
     } catch (error) {
       console.error('查询巡检数据失败:', error)
@@ -380,7 +380,7 @@ export function useDatabaseManager() {
    */
   const queryMetricsData = async (params: any = {}) => {
     try {
-      const result = await ApiService.getMetricsData(params)
+      const result = await apiService.getMetricsData(params)
       return result.data || []
     } catch (error) {
       console.error('查询指标数据失败:', error)
@@ -394,7 +394,7 @@ export function useDatabaseManager() {
    */
   const queryAnalysisResults = async (params: any = {}) => {
     try {
-      const result = await ApiService.getAnalysisResults(params)
+      const result = await apiService.getAnalysisResults(params)
       return result.data || []
     } catch (error) {
       console.error('查询AI分析结果失败:', error)

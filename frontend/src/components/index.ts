@@ -1,4 +1,4 @@
-import type { App } from 'vue'
+import { type App } from 'vue'
 
 // 导入组件
 import MainLayout from './layout/MainLayout.vue'

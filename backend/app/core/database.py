@@ -69,15 +69,29 @@ def create_engine():
         "echo_pool": settings.DEBUG,
         "pool_pre_ping": True,
         "pool_recycle": 3600,  # 1小时回收连接
-        "max_overflow": 20,
-        "pool_size": 10,
     }
+    
+    # 根据数据库类型设置连接池参数
+    database_url = str(settings.DATABASE_URL)
+    if "sqlite" in database_url:
+        # SQLite不需要连接池参数
+        engine_kwargs["poolclass"] = NullPool
+        # 移除不适用于SQLite的参数
+        engine_kwargs.pop("pool_recycle", None)
+    else:
+        # PostgreSQL等数据库使用连接池
+        engine_kwargs["max_overflow"] = 20
+        engine_kwargs["pool_size"] = 10
     
     # 测试环境使用NullPool
     if settings.TESTING:
         engine_kwargs["poolclass"] = NullPool
+        # 移除不适用于NullPool的参数
+        engine_kwargs.pop("max_overflow", None)
+        engine_kwargs.pop("pool_size", None)
+        engine_kwargs.pop("pool_recycle", None)
     
-    return create_async_engine(str(settings.DATABASE_URL), **engine_kwargs)
+    return create_async_engine(database_url, **engine_kwargs)
 
 
 # 创建引擎实例

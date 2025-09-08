@@ -1,6 +1,7 @@
 import { ref } from 'vue'
+import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ApiService } from '@/services/api'
+import { apiService } from '@/services/api'
 
 export interface AnalysisResult {
   id: string
@@ -37,7 +38,7 @@ export function useAIAnalysis() {
       console.log('🤖 开始AI分析:', request)
       
       // 调用后端AI分析接口
-      const result = await ApiService.analyzeWithAI(request)
+      const result = await apiService.analyzeWithAI(request)
       
       const analysis: AnalysisResult = {
         id: result.id || Date.now().toString(),
@@ -152,7 +153,7 @@ export function useAIAnalysis() {
         URL.revokeObjectURL(url)
       } else {
         // 调用后端导出服务
-        const blob = await ApiService.exportData('analysis', {
+        const blob = await apiService.exportData('analysis', {
           id: analysis.id,
           format: format
         })

@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = Field(env="POSTGRES_PASSWORD")
     POSTGRES_DB: str = Field(env="POSTGRES_DB")
     POSTGRES_PORT: int = Field(default=5432, env="POSTGRES_PORT")
-    DATABASE_URL: Optional[PostgresDsn] = None
+    DATABASE_URL: Optional[str] = None  # 改为通用字符串类型，不再使用PostgresDsn
     
     # ===== Redis配置 =====
     REDIS_HOST: str = Field(default="localhost", env="REDIS_HOST")
@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: Optional[AnyHttpUrl] = Field(default=None, env="SLACK_WEBHOOK_URL")
     SLACK_BOT_TOKEN: Optional[str] = Field(default=None, env="SLACK_BOT_TOKEN")
     SLACK_CHANNEL: str = Field(default="#monitoring", env="SLACK_CHANNEL")
-    
+
     # 邮件配置
     SMTP_HOST: Optional[str] = Field(default=None, env="SMTP_HOST")
     SMTP_PORT: int = Field(default=587, env="SMTP_PORT")
@@ -178,8 +178,8 @@ class Settings(BaseSettings):
         """
         构建数据库连接URL
         
-        从单独的数据库配置参数构建PostgreSQL连接字符串
-        支持异步连接(asyncpg)和同步连接(psycopg2)
+        从单独的数据库配置参数构建数据库连接字符串
+        支持多种数据库类型
         
         Args:
             values: 配置字典
@@ -187,28 +187,29 @@ class Settings(BaseSettings):
         Returns:
             Dict[str, Any]: 更新后的配置字典
         """
-        if "DATABASE_URL" in values and values["DATABASE_URL"]:
+        # 检查环境变量中是否已经设置了DATABASE_URL
+        env_database_url = os.getenv("DATABASE_URL")
+        if env_database_url:
+            values["DATABASE_URL"] = env_database_url
+            return values
+            
+        # 如果values中已经提供了DATABASE_URL（从其他配置源），直接使用
+        if values.get("DATABASE_URL"):
+            return values
+        
+        # 如果是开发环境，使用SQLite
+        env = values.get("ENVIRONMENT", os.getenv("ENVIRONMENT", "development"))
+        if env == "development":
+            values["DATABASE_URL"] = "sqlite+aiosqlite:///./smart_monitoring.db"
             return values
         
         # 构建PostgreSQL URL
-        try:
-            postgres_url = PostgresDsn.build(
-                scheme="postgresql+asyncpg",
-                username=values.get("POSTGRES_USER"),
-                password=values.get("POSTGRES_PASSWORD"),
-                host=values.get("POSTGRES_SERVER"),
-                port=values.get("POSTGRES_PORT", 5432),
-                path=values.get('POSTGRES_DB', ''),
-            )
-            values["DATABASE_URL"] = str(postgres_url)
-        except Exception as e:
-            # 如果构建失败，使用默认格式
-            user = values.get("POSTGRES_USER", "monitoring")
-            password = values.get("POSTGRES_PASSWORD", "monitoring123")
-            host = values.get("POSTGRES_SERVER", "localhost")
-            port = values.get("POSTGRES_PORT", 5432)
-            db = values.get("POSTGRES_DB", "smart_monitoring")
-            values["DATABASE_URL"] = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+        user = values.get("POSTGRES_USER", os.getenv("POSTGRES_USER", "monitoring"))
+        password = values.get("POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD", "monitoring123"))
+        host = values.get("POSTGRES_SERVER", os.getenv("POSTGRES_SERVER", "localhost"))
+        port = values.get("POSTGRES_PORT", int(os.getenv("POSTGRES_PORT", 5432)))
+        db = values.get("POSTGRES_DB", os.getenv("POSTGRES_DB", "smart_monitoring"))
+        values["DATABASE_URL"] = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
         
         return values
     
@@ -294,7 +295,7 @@ class Settings(BaseSettings):
         return str(self.DATABASE_URL).replace("+asyncpg", "")
     
     model_config = {
-        "env_file": ".env",
+        "env_file": [".env", ".env.development", "../.env", "../.env.development"],  # 检查当前目录和上级目录的.env文件
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
         "extra": "ignore",  # 忽略未定义的字段

@@ -7,8 +7,18 @@
 
 import asyncio
 import time
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# 确保在导入其他模块之前加载环境变量
+from dotenv import load_dotenv
+# 尝试加载环境变量文件
+env_files = [".env", ".env.development", "../.env", "../.env.development"]
+for env_file in env_files:
+    if os.path.exists(env_file):
+        load_dotenv(env_file)
+        break
 
 import structlog
 from fastapi import FastAPI, Request, HTTPException

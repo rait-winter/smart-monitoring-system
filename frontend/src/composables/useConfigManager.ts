@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
-import { ApiService } from '@/services/api'
+import { ref, computed } from 'vue'
+import { apiService } from '@/services/api'
 
 // Prometheus配置接口
 export interface PrometheusConfig {
@@ -96,7 +97,7 @@ export function useConfigManager() {
   // 加载配置
   const loadPrometheusConfig = async () => {
     try {
-      const config = await ApiService.getPrometheusConfig()
+      const config = await apiService.getPrometheusConfig()
       prometheusConfig.value = { ...prometheusConfig.value, ...config }
     } catch (error) {
       console.error('加载Prometheus配置失败:', error)
@@ -106,7 +107,7 @@ export function useConfigManager() {
   // 保存Prometheus配置
   const savePrometheusConfig = async () => {
     try {
-      await ApiService.updatePrometheusConfig(prometheusConfig.value)
+      await apiService.updatePrometheusConfig(prometheusConfig.value)
       return true
     } catch (error) {
       console.error('保存Prometheus配置失败:', error)
@@ -117,7 +118,7 @@ export function useConfigManager() {
   // 测试Prometheus连接
   const testPrometheusConnection = async () => {
     try {
-      const result = await ApiService.testPrometheusConnection(prometheusConfig.value)
+      const result = await apiService.testPrometheusConnection(prometheusConfig.value)
       return result.success
     } catch (error) {
       console.error('测试Prometheus连接失败:', error)

@@ -220,6 +220,25 @@ class NotificationService:
             raise RuntimeError(f"通知发送失败: {str(e)}")
     
     
+    async def send_notification_request(self, request: NotificationRequest) -> NotificationResponse:
+        """
+        发送通知请求
+        
+        Args:
+            request: 通知请求数据
+            
+        Returns:
+            NotificationResponse: 发送结果
+        """
+        return await self.send_notification(
+            title=request.title,
+            message=request.message,
+            severity=request.severity,
+            channels=request.channels,
+            recipients=request.recipients,
+            metadata=request.metadata
+        )
+
     async def _render_content(
         self, 
         title: str, 
@@ -300,60 +319,128 @@ class NotificationService:
         recipients: Optional[List[str]], 
         notification_id: str
     ) -> NotificationStatus:
-        """发送邮件通知 - 简化实现"""
-        # 实际实现中应该使用aiosmtplib发送邮件
-        # 这里仅作为示例返回成功状态
+        """
+        发送邮件通知
         
-        if not recipients:
-            recipients = ["admin@example.com"]  # 默认接收人
-        
-        self.logger.info(
-            "模拟邮件发送",
-            recipients=recipients,
-            content_preview=content[:100]
-        )
-        
-        return NotificationStatus(
-            notification_id=notification_id,
-            channel=NotificationChannel.EMAIL,
-            status="sent",
-            sent_at=datetime.now()
-        )
-    
-    
+        Args:
+            content: 邮件内容
+            recipients: 收件人列表
+            notification_id: 通知ID
+            
+        Returns:
+            NotificationStatus: 发送状态
+        """
+        try:
+            # 检查SMTP配置
+            if not settings.SMTP_HOST:
+                raise RuntimeError("SMTP服务器未配置")
+            
+            import aiosmtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            from email.utils import formatdate
+            
+            # 创建邮件内容
+            msg = MIMEMultipart()
+            msg['From'] = settings.SMTP_USERNAME
+            msg['To'] = ', '.join(recipients) if recipients else settings.SMTP_USERNAME
+            msg['Date'] = formatdate(localtime=True)
+            msg['Subject'] = "智能监控预警系统通知"
+            
+            # 添加文本内容
+            msg.attach(MIMEText(content, 'plain', 'utf-8'))
+            
+            # 发送邮件
+            await aiosmtplib.send(
+                msg,
+                hostname=settings.SMTP_HOST,
+                port=settings.SMTP_PORT,
+                username=settings.SMTP_USERNAME,
+                password=settings.SMTP_PASSWORD,
+                use_tls=settings.SMTP_USE_TLS
+            )
+            
+            return NotificationStatus(
+                notification_id=notification_id,
+                channel=NotificationChannel.EMAIL,
+                status="sent",
+                sent_at=datetime.now()
+            )
+            
+        except Exception as e:
+            self.logger.error("邮件发送失败", error=str(e))
+            return NotificationStatus(
+                notification_id=notification_id,
+                channel=NotificationChannel.EMAIL,
+                status="failed",
+                error_message=str(e)
+            )
+
     async def _send_webhook(
         self, 
         content: str, 
         recipients: Optional[List[str]], 
         notification_id: str
     ) -> NotificationStatus:
-        """发送Webhook通知"""
-        if not recipients:
-            raise ValueError("Webhook URL列表为空")
+        """
+        发送Webhook通知
         
-        payload = {
-            "notification_id": notification_id,
-            "message": content,
-            "timestamp": datetime.now().isoformat(),
-            "source": "smart-monitoring-system"
-        }
-        
-        # 发送到第一个URL（简化实现）
-        webhook_url = recipients[0]
-        response = await self.http_client.post(
-            webhook_url,
-            json=payload,
-            timeout=self.channel_configs[NotificationChannel.WEBHOOK]["timeout"]
-        )
-        response.raise_for_status()
-        
-        return NotificationStatus(
-            notification_id=notification_id,
-            channel=NotificationChannel.WEBHOOK,
-            status="sent",
-            sent_at=datetime.now()
-        )
-    
+        Args:
+            content: 通知内容
+            recipients: Webhook URL列表
+            notification_id: 通知ID
+            
+        Returns:
+            NotificationStatus: 发送状态
+        """
+        try:
+            if not recipients:
+                raise ValueError("Webhook URL列表为空")
+            
+            # 构造通知数据
+            payload = {
+                "notification_id": notification_id,
+                "message": content,
+                "timestamp": datetime.now().isoformat(),
+                "source": "smart-monitoring-system"
+            }
+            
+            # 发送到所有URL
+            success_count = 0
+            last_error = None
+            
+            for webhook_url in recipients:
+                try:
+                    response = await self.http_client.post(
+                        webhook_url,
+                        json=payload,
+                        timeout=self.channel_configs[NotificationChannel.WEBHOOK]["timeout"]
+                    )
+                    response.raise_for_status()
+                    success_count += 1
+                except Exception as e:
+                    last_error = e
+                    self.logger.warning("Webhook发送失败", url=webhook_url, error=str(e))
+            
+            if success_count > 0:
+                return NotificationStatus(
+                    notification_id=notification_id,
+                    channel=NotificationChannel.WEBHOOK,
+                    status="sent",
+                    sent_at=datetime.now()
+                )
+            else:
+                raise last_error or RuntimeError("所有Webhook发送都失败")
+                
+        except Exception as e:
+            self.logger.error("Webhook发送失败", error=str(e))
+            return NotificationStatus(
+                notification_id=notification_id,
+                channel=NotificationChannel.WEBHOOK,
+                status="failed",
+                error_message=str(e)
+            )
+
     
     async def _is_duplicate_notification(self, title: str, message: str, severity: AlertSeverity) -> bool:
         """检查是否为重复通知"""

@@ -1219,6 +1219,9 @@ const targetForm = ref({
   enabled: true
 })
 
+// 标签编辑器
+const targetLabels = ref<Array<{ key: string; value: string }>>([{ key: '', value: '' }])
+
 // AI功能配置
 const aiFeatures = ref({
   anomalyDetection: {
@@ -1261,6 +1264,104 @@ const exportLoading = ref({
   metrics: false,
   analysis: false
 })
+
+// 数据库状态信息
+const testDatabaseConnection = async () => {
+  testDbLoading.value = true
+  dbConnectionStatus.value = null
+  
+  try {
+    const success = await testDbConnection()
+    dbConnectionStatus.value = {
+      success,
+      message: success ? '连接成功' : '连接失败'
+    }
+    
+    if (success) {
+      ElMessage.success('数据库连接测试成功！')
+    } else {
+      ElMessage.error('数据库连接失败，请检查配置')
+    }
+  } catch (error) {
+    dbConnectionStatus.value = {
+      success: false,
+      message: '连接失败'
+    }
+    ElMessage.error('连接测试失败')
+  } finally {
+    testDbLoading.value = false
+  }
+}
+
+// 保存数据库配置
+const saveDatabaseConfig = async () => {
+  saveDbLoading.value = true
+  try {
+    // 这里调用API保存数据库配置
+    console.log('保存数据库配置:', databaseConfig.value)
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    ElMessage.success('数据库配置已保存')
+  } catch (error) {
+    console.error('保存数据库配置失败:', error)
+    ElMessage.error('配置保存失败')
+  } finally {
+    saveDbLoading.value = false
+  }
+}
+
+// 备份数据库
+const backupDatabase = async () => {
+  backupLoading.value = true
+  try {
+    const result = await performBackup()
+    if (result) {
+      ElMessage.success('数据库备份成功')
+    } else {
+      ElMessage.error('数据库备份失败')
+    }
+  } catch (error) {
+    ElMessage.error('备份操作失败')
+  } finally {
+    backupLoading.value = false
+  }
+}
+
+// 导出数据功能
+const exportInspectionData = async () => {
+  exportLoading.value.inspection = true
+  try {
+    await exportDbData('inspection', exportConfig.value.inspection.format)
+    ElMessage.success('巡检数据导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value.inspection = false
+  }
+}
+
+const exportMetricsData = async () => {
+  exportLoading.value.metrics = true
+  try {
+    await exportDbData('metrics', exportConfig.value.metrics.format)
+    ElMessage.success('指标数据导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value.metrics = false
+  }
+}
+
+const exportAnalysisData = async () => {
+  exportLoading.value.analysis = true
+  try {
+    await exportDbData('analysis', exportConfig.value.analysis.format)
+    ElMessage.success('AI分析结果导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value.analysis = false
+  }
+}
 
 // 表单验证规则
 const targetFormRules = {

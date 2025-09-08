@@ -664,6 +664,37 @@ export type QuickTimeRange =
   | 'custom'
 
 /**
+ * 登录凭据
+ */
+export interface LoginCredentials {
+  username: string
+  password: string
+  rememberMe?: boolean
+  captcha?: string
+}
+
+/**
+ * 通知项
+ */
+export interface NotificationItem {
+  id: string
+  title: string
+  message: string
+  type: 'success' | 'warning' | 'error' | 'info'
+  timestamp: string
+  read: boolean
+  hidden: boolean
+  priority: 'low' | 'medium' | 'high'
+  category?: string
+  actions?: Array<{
+    label: string
+    action: string
+    type?: 'primary' | 'success' | 'warning' | 'danger'
+  }>
+  data?: Record<string, any>
+}
+
+/**
  * 状态类型联合
  */
 export type Status = 

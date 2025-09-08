@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios'
+import axios, { type AxiosInstance } from 'axios'
 import { ElMessage } from 'element-plus'
 import { globalErrorHandler, ErrorType } from '@/utils/errorHandler'
 import type { ApiResponse } from '@/types/global'
@@ -149,6 +149,11 @@ export class ApiService {
     return this.post('/prometheus/test', config)
   }
   
+  // 数据库健康检查
+  async checkDatabaseHealth() {
+    return this.get('/database/health')
+  }
+  
   // 指标数据
   async getMetrics(params?: any) {
     return this.get('/metrics', params)
@@ -234,8 +239,26 @@ export class ApiService {
     return this.get('/database/metrics', params)
   }
 
-  async checkDatabaseHealth() {
-    return this.get('/database/health')
+  async saveAnalysisResult(data: any) {
+    return this.post('/database/analysis', data)
+  }
+
+  async getAnalysisResults(params?: any) {
+    return this.get('/database/analysis', params)
+  }
+
+  async exportDatabaseData(type: string, params: any): Promise<Blob> {
+    const response = await this.httpClient.request({
+      url: `/database/export/${type}`,
+      method: 'GET',
+      params,
+      responseType: 'blob'
+    })
+    return response.data
+  }
+
+  async backupDatabase() {
+    return this.post('/database/backup')
   }
 }
 
