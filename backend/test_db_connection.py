@@ -1,54 +1,92 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-测试数据库连接
+智能监控预警系统 - 数据库连接测试脚本
+用于验证数据库连接和表结构
 """
 
 import asyncio
-import sys
+import asyncpg
 import os
 
-# 添加项目根目录到Python路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 数据库连接配置
+DB_CONFIG = {
+    'host': '192.168.233.133',
+    'port': 30199,
+    'user': 'postgres',
+    'password': 'zalando',
+    'database': 'smart_monitoring'
+}
 
-# 加载环境变量
-from dotenv import load_dotenv
-env_files = [".env", ".env.development", "../.env", "../.env.development"]
-for env_file in env_files:
-    if os.path.exists(env_file):
-        print(f"加载环境文件: {env_file}")
-        load_dotenv(env_file)
-        break
+async def test_database_connection():
+    """测试数据库连接"""
+    try:
+        # 连接到数据库
+        conn = await asyncpg.connect(**DB_CONFIG)
+        print("✓ 数据库连接成功")
+        
+        # 测试查询用户表
+        users = await conn.fetch("SELECT COUNT(*) as count FROM users")
+        print(f"✓ 用户表记录数: {users[0]['count']}")
+        
+        # 测试查询巡检规则表
+        rules = await conn.fetch("SELECT COUNT(*) as count FROM inspection_rules")
+        print(f"✓ 巡检规则表记录数: {rules[0]['count']}")
+        
+        # 测试查询指标元数据表
+        metrics = await conn.fetch("SELECT COUNT(*) as count FROM metrics_metadata")
+        print(f"✓ 指标元数据表记录数: {metrics[0]['count']}")
+        
+        # 显示表结构信息
+        print("\n数据库表结构信息:")
+        tables = await conn.fetch("""
+            SELECT table_name, 
+                   (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = t.table_name) as column_count
+            FROM information_schema.tables t
+            WHERE table_schema = 'public'
+            ORDER BY table_name
+        """)
+        
+        for table in tables:
+            print(f"  - {table['table_name']} ({table['column_count']} 列)")
+        
+        # 显示初始数据
+        print("\n初始数据检查:")
+        
+        # 检查用户数据
+        admin_user = await conn.fetchrow("SELECT username, email, role FROM users WHERE username = 'admin'")
+        if admin_user:
+            print(f"  ✓ 管理员用户: {admin_user['username']} ({admin_user['email']}) - {admin_user['role']}")
+        
+        # 检查巡检规则数据
+        rules_count = await conn.fetchval("SELECT COUNT(*) FROM inspection_rules")
+        print(f"  ✓ 巡检规则数量: {rules_count}")
+        
+        # 检查指标元数据
+        metrics_count = await conn.fetchval("SELECT COUNT(*) FROM metrics_metadata")
+        print(f"  ✓ 指标元数据数量: {metrics_count}")
+        
+        await conn.close()
+        return True
+        
+    except Exception as e:
+        print(f"✗ 数据库连接测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
-print("环境变量检查:")
-print(f"  DATABASE_URL: {os.getenv('DATABASE_URL')}")
-print(f"  ENVIRONMENT: {os.getenv('ENVIRONMENT')}")
+async def main():
+    """主函数"""
+    print("智能监控预警系统 - 数据库连接测试")
+    print("=" * 40)
+    print(f"数据库地址: {DB_CONFIG['host']}:{DB_CONFIG['port']}")
+    print(f"数据库名称: {DB_CONFIG['database']}")
+    print("=" * 40)
+    
+    if await test_database_connection():
+        print("\n✓ 所有数据库测试通过")
+    else:
+        print("\n✗ 数据库测试失败")
 
-try:
-    from app.core.config import settings
-    print(f"配置 DATABASE_URL: {settings.DATABASE_URL}")
-    print(f"配置 ENVIRONMENT: {settings.ENVIRONMENT}")
-    
-    from app.core.database import engine
-    print(f"引擎 URL: {engine.url}")
-    
-    async def test_connection():
-        try:
-            async with engine.begin() as conn:
-                print("✅ 数据库连接成功!")
-                # 使用正确的SQLAlchemy语法
-                from sqlalchemy import text
-                result = await conn.execute(text("SELECT 1"))
-                print(f"查询结果: {result.scalar()}")
-        except Exception as e:
-            print(f"❌ 数据库连接失败: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    asyncio.run(test_connection())
-    
-except Exception as e:
-    print(f"❌ 测试失败: {e}")
-    import traceback
-    traceback.print_exc()
+if __name__ == "__main__":
+    asyncio.run(main())

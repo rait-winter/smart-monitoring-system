@@ -23,7 +23,8 @@ from .endpoints import (
     rules,
     notifications,
     metrics,
-    system
+    system,
+    prometheus
 )
 
 # 创建API v1路由器
@@ -60,6 +61,13 @@ api_router.include_router(
     tags=["系统管理"]
 )
 
+# 注册Prometheus配置管理路由
+api_router.include_router(
+    prometheus.router,
+    prefix="/prometheus",
+    tags=["Prometheus配置"]
+)
+
 # 根路径信息
 @api_router.get("/", tags=["API信息"])
 async def api_info():
@@ -73,7 +81,8 @@ async def api_info():
             "rules - 规则引擎管理",
             "notifications - 通知服务",
             "metrics - 指标数据查询",
-            "system - 系统管理"
+            "system - 系统管理",
+            "prometheus - Prometheus配置管理"
         ],
         "docs": "/docs",
         "openapi": "/openapi.json"

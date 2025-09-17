@@ -1,5 +1,4 @@
 import { ref, computed } from 'vue'
-import { ref, computed } from 'vue'
 import { apiService } from '@/services/api'
 
 // Prometheus配置接口
@@ -97,8 +96,20 @@ export function useConfigManager() {
   // 加载配置
   const loadPrometheusConfig = async () => {
     try {
-      const config = await apiService.getPrometheusConfig()
-      prometheusConfig.value = { ...prometheusConfig.value, ...config }
+      const response = await apiService.getPrometheusConfig()
+      console.log('API响应:', response)
+      
+      // 检查响应格式并提取配置数据
+      if (response && response.data && response.data.config) {
+        prometheusConfig.value = { ...prometheusConfig.value, ...response.data.config }
+        console.log('配置加载成功:', prometheusConfig.value)
+      } else if (response && response.config) {
+        // 兼容直接返回config的情况
+        prometheusConfig.value = { ...prometheusConfig.value, ...response.config }
+        console.log('配置加载成功(兼容格式):', prometheusConfig.value)
+      } else {
+        console.warn('API响应格式不正确:', response)
+      }
     } catch (error) {
       console.error('加载Prometheus配置失败:', error)
     }
@@ -119,7 +130,8 @@ export function useConfigManager() {
   const testPrometheusConnection = async () => {
     try {
       const result = await apiService.testPrometheusConnection(prometheusConfig.value)
-      return result.success
+      console.log('Prometheus连接测试结果:', result)
+      return result?.success || false
     } catch (error) {
       console.error('测试Prometheus连接失败:', error)
       return false

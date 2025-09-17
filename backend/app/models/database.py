@@ -50,7 +50,7 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     
     # 关系
-    alerts: Mapped[List["Alert"]] = relationship("Alert", back_populates="user")
+    alerts: Mapped[List["Alert"]] = relationship("Alert", foreign_keys="Alert.user_id", back_populates="user")
     rules: Mapped[List["InspectionRule"]] = relationship("InspectionRule", back_populates="user")
     
     __table_args__ = (
@@ -179,7 +179,7 @@ class Notification(Base):
     max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     
     # 附加信息
-    metadata: Mapped[Dict] = mapped_column(JSON, default=dict)
+    extra_data: Mapped[Dict] = mapped_column(JSON, default=dict)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

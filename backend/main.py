@@ -22,16 +22,25 @@ for env_file in env_files:
 
 import structlog
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.models.schemas import APIResponse
+from app.middleware.performance import PerformanceMiddleware
+from app.middleware.error_handler import (
+    global_exception_handler,
+    http_exception_handler,
+    validation_exception_handler,
+    starlette_exception_handler
+)
 
 
 # 配置结构化日志
@@ -123,12 +132,15 @@ def create_application() -> FastAPI:
 def setup_middleware(app: FastAPI) -> None:
     """设置中间件"""
     
+    # 性能监控中间件（最先添加，最后执行）
+    app.add_middleware(PerformanceMiddleware)
+    
     # CORS中间件
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.BACKEND_CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
+        allow_origins=["*"],  # 临时允许所有来源，用于调试
+        allow_credentials=False,  # 临时禁用credentials
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         expose_headers=["*"],
     )
@@ -137,7 +149,12 @@ def setup_middleware(app: FastAPI) -> None:
     if settings.is_production:
         app.add_middleware(
             TrustedHostMiddleware,
-            allowed_hosts=["localhost", "127.0.0.1", "*"]  # 在生产中应该配置具体域名
+            allowed_hosts=[
+                "localhost", 
+                "127.0.0.1",
+                "192.168.10.35",
+                "192.168.233.137"
+            ]  # 生产环境中应配置具体域名
         )
     
     # Gzip压缩中间件
@@ -205,43 +222,11 @@ def setup_routes(app: FastAPI) -> None:
 def setup_exception_handlers(app: FastAPI) -> None:
     """设置异常处理器"""
     
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        """HTTP异常处理"""
-        logger.warning(
-            "HTTP异常",
-            status_code=exc.status_code,
-            detail=exc.detail,
-            path=request.url.path,
-            method=request.method
-        )
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=APIResponse(
-                success=False,
-                message=exc.detail,
-                data={"status_code": exc.status_code}
-            ).dict()
-        )
-    
-    @app.exception_handler(Exception)
-    async def general_exception_handler(request: Request, exc: Exception):
-        """通用异常处理"""
-        logger.error(
-            "未处理异常",
-            error=str(exc),
-            path=request.url.path,
-            method=request.method,
-            exc_info=True
-        )
-        return JSONResponse(
-            status_code=500,
-            content=APIResponse(
-                success=False,
-                message="服务器内部错误" if settings.is_production else str(exc),
-                data={"error_type": type(exc).__name__}
-            ).dict()
-        )
+    # 使用统一的错误处理器
+    app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, starlette_exception_handler)
+    app.add_exception_handler(Exception, global_exception_handler)
 
 
 def setup_monitoring(app: FastAPI) -> None:

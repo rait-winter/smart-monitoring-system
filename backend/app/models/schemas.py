@@ -76,6 +76,7 @@ class APIResponse(BaseSchema):
     success: bool = Field(default=True, description="请求是否成功")
     message: str = Field(default="操作成功", description="响应消息")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="响应时间")
+    data: Optional[Dict[str, Any]] = Field(default=None, description="响应数据")
 
 
 class PaginatedResponse(APIResponse):
@@ -186,6 +187,8 @@ class AnomalyPoint(BaseSchema):
 
 class AnomalyDetectionResult(BaseSchema):
     """异常检测结果"""
+    model_config = ConfigDict(protected_namespaces=())
+    
     anomalies: List[AnomalyPoint] = Field(description="异常点列表")
     total_points: int = Field(ge=0, description="总数据点数")
     anomaly_count: int = Field(ge=0, description="异常点数量")
@@ -193,7 +196,7 @@ class AnomalyDetectionResult(BaseSchema):
     algorithm_used: AlgorithmType = Field(description="使用的算法")
     execution_time: float = Field(ge=0, description="执行耗时")
     recommendations: List[str] = Field(default_factory=list, description="建议操作")
-    model_info: Dict[str, Any] = Field(default_factory=dict, description="模型信息")
+    algorithm_info: Dict[str, Any] = Field(default_factory=dict, description="算法信息")
 
 
 class AnomalyDetectionResponse(APIResponse):

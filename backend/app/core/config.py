@@ -7,13 +7,11 @@
 
 import os
 import secrets
-from functools import lru_cache
 from typing import List, Optional, Any, Dict
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, AnyHttpUrl, RedisDsn
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, PostgresDsn, RedisDsn
 
 
 class Settings(BaseSettings):
@@ -59,17 +57,24 @@ class Settings(BaseSettings):
     
     # ===== 跨域配置 =====
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
-        env="BACKEND_CORS_ORIGINS"
+        default=[
+            "http://localhost:3000", 
+            "http://localhost:8080",
+            "http://192.168.10.35:3000",
+            "http://192.168.233.137:3000",
+            "http://127.0.0.1:3000"
+        ],
+        env="BACKEND_CORS_ORIGINS",
+        description="允许的跨域来源，生产环境中应设置具体的域名"
     )
     
     # ===== 数据库配置 =====
-    POSTGRES_SERVER: str = Field(env="POSTGRES_SERVER")
-    POSTGRES_USER: str = Field(env="POSTGRES_USER") 
-    POSTGRES_PASSWORD: str = Field(env="POSTGRES_PASSWORD")
-    POSTGRES_DB: str = Field(env="POSTGRES_DB")
-    POSTGRES_PORT: int = Field(default=5432, env="POSTGRES_PORT")
-    DATABASE_URL: Optional[str] = None  # 改为通用字符串类型，不再使用PostgresDsn
+    # 数据库连接URL - 生产环境中必须通过环境变量设置
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://postgres:password@localhost:5432/smart_monitoring", 
+        env="DATABASE_URL",
+        description="数据库连接URL，格式：postgresql+asyncpg://用户名:密码@主机:端口/数据库名"
+    )
     
     # ===== Redis配置 =====
     REDIS_HOST: str = Field(default="localhost", env="REDIS_HOST")
@@ -115,7 +120,10 @@ class Settings(BaseSettings):
     
     # ===== 日志配置 =====
     LOG_LEVEL: str = Field(default="INFO", env="LOG_LEVEL")
-    LOG_FORMAT: str = Field(default="json", env="LOG_FORMAT")  # json 或 text
+    LOG_FORMAT: str = Field(default="json", env="LOG_FORMAT")
+    
+    # ===== 配置存储 =====
+    CONFIG_DIR: str = Field(default="./config", env="CONFIG_DIR")  # json 或 text
     LOG_FILE: Optional[str] = Field(default=None, env="LOG_FILE")
     
     # ===== Sentry配置 =====
@@ -158,6 +166,7 @@ class Settings(BaseSettings):
         
         支持多种格式输入：
         - 字符串: "http://localhost:3000,http://localhost:8080"
+        - JSON数组字符串: "["http://localhost:3000", "http://localhost:8080"]"
         - 列表: ["http://localhost:3000", "http://localhost:8080"]
         
         Args:
@@ -166,9 +175,18 @@ class Settings(BaseSettings):
         Returns:
             List[str]: 解析后的origins列表
         """
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, (list, str)):
+        if isinstance(v, str):
+            # 如果是JSON数组格式的字符串
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    pass
+            # 如果是逗号分隔的字符串
+            elif not v.startswith("["):
+                return [i.strip() for i in v.split(",") if i.strip()]
+        elif isinstance(v, list):
             return v
         raise ValueError(f"无效的CORS origins格式: {v}")
     
@@ -197,19 +215,8 @@ class Settings(BaseSettings):
         if values.get("DATABASE_URL"):
             return values
         
-        # 如果是开发环境，使用SQLite
-        env = values.get("ENVIRONMENT", os.getenv("ENVIRONMENT", "development"))
-        if env == "development":
-            values["DATABASE_URL"] = "sqlite+aiosqlite:///./smart_monitoring.db"
-            return values
-        
-        # 构建PostgreSQL URL
-        user = values.get("POSTGRES_USER", os.getenv("POSTGRES_USER", "monitoring"))
-        password = values.get("POSTGRES_PASSWORD", os.getenv("POSTGRES_PASSWORD", "monitoring123"))
-        host = values.get("POSTGRES_SERVER", os.getenv("POSTGRES_SERVER", "localhost"))
-        port = values.get("POSTGRES_PORT", int(os.getenv("POSTGRES_PORT", 5432)))
-        db = values.get("POSTGRES_DB", os.getenv("POSTGRES_DB", "smart_monitoring"))
-        values["DATABASE_URL"] = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+        # 使用安全的默认配置
+        values["DATABASE_URL"] = "postgresql+asyncpg://postgres:password@localhost:5432/smart_monitoring"
         
         return values
     
@@ -302,11 +309,5 @@ class Settings(BaseSettings):
     }
 
 
-@lru_cache()
-def get_settings() -> Settings:
-    """获取应用设置（带缓存）"""
-    return Settings()
-
-
-# 创建全局设置实例
-settings = get_settings()
+# 创建全局设置实例（不使用缓存）
+settings = Settings()

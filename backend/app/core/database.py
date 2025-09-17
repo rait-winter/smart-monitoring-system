@@ -80,8 +80,10 @@ def create_engine():
         engine_kwargs.pop("pool_recycle", None)
     else:
         # PostgreSQL等数据库使用连接池
-        engine_kwargs["max_overflow"] = 20
-        engine_kwargs["pool_size"] = 10
+        engine_kwargs["max_overflow"] = settings.MAX_CONNECTIONS
+        engine_kwargs["pool_size"] = min(20, settings.MAX_CONNECTIONS // 2)
+        engine_kwargs["pool_timeout"] = settings.CONNECTION_TIMEOUT
+        engine_kwargs["pool_reset_on_return"] = "commit"
     
     # 测试环境使用NullPool
     if settings.TESTING:
@@ -128,6 +130,11 @@ async def get_async_session() -> AsyncSession:
             raise
         finally:
             await session.close()
+
+
+def get_db_session():
+    """获取数据库会话的便利函数"""
+    return AsyncSessionLocal()
 
 
 async def init_db():

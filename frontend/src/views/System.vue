@@ -193,7 +193,7 @@
               <el-button 
                 size="small" 
                 type="primary" 
-                @click="savePrometheusConfig" 
+                @click="savePrometheusConfigLocal" 
                 :loading="savePrometheusLoading"
               >
                 保存配置
@@ -1172,6 +1172,7 @@ const {
   isPrometheusConfigured,
   isOllamaConfigured,
   isDatabaseConfigured,
+  loadPrometheusConfig,
   savePrometheusConfig,
   testPrometheusConnection: testConnection,
   addPrometheusTarget,
@@ -1532,6 +1533,29 @@ const systemLogs = ref([
 /**
  * Ollama配置相关方法
  */
+
+/**
+ * 保存Prometheus配置
+ */
+const savePrometheusConfigLocal = async () => {
+  savePrometheusLoading.value = true
+  try {
+    // 调用composable中的保存函数
+    const success = await savePrometheusConfig()
+    if (success) {
+      ElMessage.success('Prometheus配置已保存')
+      // 保存成功后重新加载配置，更新页面显示
+      await loadPrometheusConfig()
+    } else {
+      ElMessage.error('配置保存失败')
+    }
+  } catch (error) {
+    console.error('保存Prometheus配置失败:', error)
+    ElMessage.error('配置保存失败')
+  } finally {
+    savePrometheusLoading.value = false
+  }
+}
 
 /**
  * 保存Ollama配置
@@ -2002,8 +2026,15 @@ const formatUptime = (seconds: number): string => {
 }
 
 // 生命周期钩子
-onMounted(() => {
+onMounted(async () => {
   document.title = '系统管理 - 智能监控预警系统'
+  
+  // 加载配置
+  try {
+    await loadPrometheusConfig()
+  } catch (error) {
+    console.error('加载配置失败:', error)
+  }
 })
 </script>
 

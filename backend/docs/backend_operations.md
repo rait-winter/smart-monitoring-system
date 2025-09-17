@@ -8,11 +8,12 @@
 2. [项目启动](#项目启动)
 3. [配置管理](#配置管理)
 4. [数据库操作](#数据库操作)
-5. [测试运行](#测试运行)
-6. [API文档](#api文档)
-7. [日志查看](#日志查看)
-8. [性能监控](#性能监控)
-9. [故障排除](#故障排除)
+5. [Prometheus集成](#prometheus集成)
+6. [测试运行](#测试运行)
+7. [API文档](#api文档)
+8. [日志查看](#日志查看)
+9. [性能监控](#性能监控)
+10. [故障排除](#故障排除)
 
 ## 环境准备
 
@@ -53,6 +54,8 @@ vim .env  # 或使用其他编辑器
 2. **生产环境**: PostgreSQL
 
 开发环境会自动使用SQLite数据库，无需额外配置PostgreSQL。
+
+有关详细的数据库配置、初始化和管理，请参考专门的[数据库设置文档](./database_setup.md)。
 
 ## 项目启动
 
@@ -188,6 +191,38 @@ if __name__ == "__main__":
 python test_db_connection.py
 ```
 
+## Prometheus集成
+
+### 1. Prometheus配置
+
+在 [.env](file:///d%3A/autocode/20250902/backend/.env) 文件中配置Prometheus地址：
+
+```bash
+# Prometheus配置
+PROMETHEUS_URL=http://localhost:9090
+PROMETHEUS_TIMEOUT=30
+PROMETHEUS_MAX_RETRIES=3
+```
+
+### 2. Prometheus连接测试
+
+使用API端点测试Prometheus连接：
+
+```bash
+# 测试Prometheus连接
+curl -X POST http://localhost:8000/api/v1/prometheus/test \
+  -H "Content-Type: application/json" \
+  -d '{"url": "http://localhost:9090"}'
+```
+
+### 3. Prometheus API端点
+
+系统提供以下Prometheus相关API端点：
+
+- `GET /api/v1/prometheus/config` - 获取Prometheus配置
+- `POST /api/v1/prometheus/config` - 更新Prometheus配置
+- `POST /api/v1/prometheus/test` - 测试Prometheus连接
+
 ## 测试运行
 
 ### 1. 运行所有测试
@@ -280,6 +315,24 @@ echo $DATABASE_URL
 python test_db_connection.py
 ```
 
+#### Prometheus连接失败
+```bash
+# 检查Prometheus URL配置
+echo $PROMETHEUS_URL
+
+# 测试Prometheus连接
+curl -X POST http://localhost:8000/api/v1/prometheus/test \
+  -H "Content-Type: application/json" \
+  -d '{"url": "http://localhost:9090"}'
+```
+
+#### CORS跨域问题
+检查后端CORS配置是否包含前端地址：
+```bash
+# 在.env文件中检查
+cat .env | grep BACKEND_CORS_ORIGINS
+```
+
 #### 环境变量未加载
 ```bash
 # 验证环境变量
@@ -339,17 +392,20 @@ for env_file in env_files:
 print("环境变量检查:")
 print(f"  DATABASE_URL: {os.getenv('DATABASE_URL')}")
 print(f"  ENVIRONMENT: {os.getenv('ENVIRONMENT')}")
+print(f"  PROMETHEUS_URL: {os.getenv('PROMETHEUS_URL')}")
 
 print("\n=== Pydantic配置加载阶段 ===")
 try:
     from app.core.config import Settings
     settings = Settings()
     print(f"配置实例 DATABASE_URL: {settings.DATABASE_URL}")
+    print(f"配置实例 PROMETHEUS_URL: {settings.PROMETHEUS_URL}")
     print(f"配置实例 ENVIRONMENT: {settings.ENVIRONMENT}")
     
     print("\n=== 全局设置检查 ===")
     from app.core.config import settings as global_settings
     print(f"全局设置 DATABASE_URL: {global_settings.DATABASE_URL}")
+    print(f"全局设置 PROMETHEUS_URL: {global_settings.PROMETHEUS_URL}")
     print(f"全局设置 ENVIRONMENT: {global_settings.ENVIRONMENT}")
     
 except Exception as e:

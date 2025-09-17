@@ -5,7 +5,7 @@ import type { ApiResponse } from '@/types/global'
 import type { RequestConfig } from '@/types/api'
 
 // ======== API 配置 ========
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+const API_BASE_URL = '/api/v1'  // 强制使用相对路径，通过Vite代理转发
 const API_TIMEOUT = 30000
 
 /**
@@ -41,6 +41,13 @@ function createHttpClient(): AxiosInstance {
   client.interceptors.response.use(
     (response) => {
       console.log(`%c✓ API响应: ${response.config.url}`, 'color: #67c23a; font-size: 11px;')
+      console.log('响应数据:', response.data)
+      
+      // 检查响应数据是否存在
+      if (!response.data) {
+        console.warn('响应数据为空')
+        return { success: false, message: '响应数据为空' }
+      }
       
       // 检查业务错误
       if (response.data && !response.data.success && response.data.code !== 200) {
@@ -48,6 +55,7 @@ function createHttpClient(): AxiosInstance {
         throw error
       }
       
+      console.log('响应拦截器返回:', response.data)
       return response.data
     },
     (error) => {
@@ -91,7 +99,7 @@ export class ApiService {
   async request<T = any>(url: string, config: RequestConfig = {}): Promise<T> {
     const { method = 'GET', params, data, ...restConfig } = config
     
-    const response = await this.httpClient.request<ApiResponse<T>>({
+    const response = await this.httpClient.request<T>({
       url,
       method,
       params,
@@ -99,13 +107,10 @@ export class ApiService {
       ...restConfig
     })
     
-    // 如果响应是 ApiResponse 格式，返回其中的 data
-    if (response.data && typeof response.data === 'object' && 'data' in response.data) {
-      return response.data.data
-    }
+    console.log('request方法接收到的响应:', response)
     
-    // 否则直接返回响应数据
-    return response.data as T
+    // 响应拦截器已经处理了数据，直接返回
+    return response as T
   }
 
   // HTTP 方法快捷方式
@@ -138,7 +143,9 @@ export class ApiService {
 
   // Prometheus 配置相关
   async getPrometheusConfig() {
-    return this.get('/prometheus/config')
+    console.log('🔥 [FIXED] 发送Prometheus配置请求: /prometheus/config')
+    console.log('🔥 [FIXED] 完整baseURL:', API_BASE_URL)
+    return this.get('/prometheus/config?_t=' + Date.now())
   }
   
   async updatePrometheusConfig(config: any) {
@@ -205,6 +212,21 @@ export class ApiService {
   
   async getSystemServices() {
     return this.get('/system/services')
+  }
+
+  // 新增：获取系统健康状态
+  async getSystemHealth() {
+    return this.get('/system/health')
+  }
+
+  // 新增：获取系统统计信息
+  async getSystemStatistics() {
+    return this.get('/system/statistics')
+  }
+
+  // 新增：获取仪表盘数据
+  async getDashboardData() {
+    return this.get('/system/dashboard')
   }
 
   async getCurrentUser() {

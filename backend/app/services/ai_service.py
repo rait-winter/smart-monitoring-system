@@ -130,8 +130,12 @@ class AIAnomalyDetector:
         self.model_dir.mkdir(parents=True, exist_ok=True)
         
         # 内存缓存配置 - 缓存模型和预处理器，TTL=5分钟
-        self.model_cache = TTLCache(maxsize=50, ttl=settings.AI_CACHE_TTL)
-        self.scaler_cache = TTLCache(maxsize=50, ttl=settings.AI_CACHE_TTL)
+        self.model_cache = TTLCache(maxsize=100, ttl=settings.AI_CACHE_TTL)
+        self.scaler_cache = TTLCache(maxsize=100, ttl=settings.AI_CACHE_TTL)
+        
+        # 批处理配置
+        self.batch_size = settings.AI_BATCH_SIZE
+        self.max_workers = settings.AI_MAX_WORKERS
         
         # 算法配置参数
         self.algorithm_configs = {
@@ -245,7 +249,7 @@ class AIAnomalyDetector:
             )
             
             # 7. 模型信息
-            model_info = {
+            algorithm_info = {
                 "algorithm": algorithm.value,
                 "sensitivity": sensitivity,
                 "threshold": threshold,
@@ -273,7 +277,7 @@ class AIAnomalyDetector:
                 algorithm_used=algorithm,
                 execution_time=execution_time,
                 recommendations=recommendations,
-                model_info=model_info
+                algorithm_info=algorithm_info
             )
             
         except Exception as e:

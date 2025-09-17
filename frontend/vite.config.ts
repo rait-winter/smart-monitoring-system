@@ -98,10 +98,14 @@ export default defineConfig(({ mode }) => {
       cors: true,
       proxy: {
         '/api': {
-          target: env.VITE_API_BASE_URL || 'http://localhost:8000',
+          target: 'http://localhost:8000',
           changeOrigin: true,
           secure: false,
           timeout: 30000,
+          rewrite: (path) => {
+            console.log('代理请求:', path)
+            return path
+          }
         },
       },
     },

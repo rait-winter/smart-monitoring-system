@@ -17,8 +17,9 @@
 
 import time
 from datetime import datetime
+from typing import Dict, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 import structlog
 
 from app.models.schemas import (
@@ -28,6 +29,12 @@ from app.models.schemas import (
     APIResponse
 )
 from app.core.config import settings
+from app.services.prometheus_service import PrometheusService
+from app.middleware.performance import (
+    get_performance_metrics,
+    get_slow_requests,
+    get_error_requests
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -66,6 +73,42 @@ async def health_check() -> HealthCheckResponse:
     except Exception as e:
         logger.error("健康检查失败", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prometheus/test", response_model=APIResponse)
+async def test_prometheus_connection(config: Dict[str, Any] = Body(..., description="Prometheus配置")) -> APIResponse:
+    """测试Prometheus连接"""
+    try:
+        # 创建临时Prometheus服务实例用于测试
+        prometheus_service = PrometheusService()
+        
+        # 如果提供了URL，则使用提供的URL
+        if "url" in config and config["url"]:
+            prometheus_service.base_url = config["url"].rstrip('/')
+        
+        # 执行健康检查
+        is_healthy = await prometheus_service.health_check()
+        
+        if is_healthy:
+            return APIResponse(
+                success=True,
+                message="Prometheus连接测试成功",
+                data={"healthy": True}
+            )
+        else:
+            return APIResponse(
+                success=False,
+                message="Prometheus连接测试失败，请检查配置",
+                data={"healthy": False}
+            )
+            
+    except Exception as e:
+        logger.error("Prometheus连接测试失败", error=str(e))
+        return APIResponse(
+            success=False,
+            message=f"Prometheus连接测试失败: {str(e)}",
+            data={"healthy": False, "error": str(e)}
+        )
 
 
 @router.get("/statistics", response_model=APIResponse)
@@ -180,3 +223,48 @@ async def get_version_info() -> APIResponse:
             "debug": settings.DEBUG
         }
     )
+
+
+@router.get("/performance", response_model=APIResponse)
+async def get_performance_info() -> APIResponse:
+    """获取性能监控信息"""
+    try:
+        metrics = await get_performance_metrics()
+        return APIResponse(
+            success=True,
+            message="获取性能信息成功",
+            data=metrics
+        )
+    except Exception as e:
+        logger.error("获取性能信息失败", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/performance/slow-requests", response_model=APIResponse)
+async def get_slow_requests_info(limit: int = 10) -> APIResponse:
+    """获取慢请求信息"""
+    try:
+        slow_requests = await get_slow_requests(limit)
+        return APIResponse(
+            success=True,
+            message="获取慢请求信息成功",
+            data={"slow_requests": slow_requests}
+        )
+    except Exception as e:
+        logger.error("获取慢请求信息失败", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/performance/error-requests", response_model=APIResponse)
+async def get_error_requests_info(limit: int = 10) -> APIResponse:
+    """获取错误请求信息"""
+    try:
+        error_requests = await get_error_requests(limit)
+        return APIResponse(
+            success=True,
+            message="获取错误请求信息成功",
+            data={"error_requests": error_requests}
+        )
+    except Exception as e:
+        logger.error("获取错误请求信息失败", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

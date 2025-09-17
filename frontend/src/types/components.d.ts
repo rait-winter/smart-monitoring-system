@@ -16,6 +16,7 @@ declare module 'vue' {
     CommonMobileTable: typeof import('./../components/common/MobileTable.vue')['default']
     CommonMonitorChart: typeof import('./../components/common/MonitorChart.vue')['default']
     CommonVirtualList: typeof import('./../components/common/VirtualList.vue')['default']
+    CommonVirtualTable: typeof import('./../components/common/VirtualTable.vue')['default']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElAvatar: typeof import('element-plus/es')['ElAvatar']
     ElBadge: typeof import('element-plus/es')['ElBadge']

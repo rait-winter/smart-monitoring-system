@@ -1,0 +1,32 @@
+{
+  "prometheus": {
+    "enabled": true,
+    "url": "http://192.168.233.137:30090/",
+    "timeout": 30000,
+    "max_retries": 3,
+    "scrape_interval": "15s",
+    "evaluation_interval": "15s",
+    "targets": [],
+    "scrapeInterval": "15s",
+    "evaluationInterval": "15s",
+    "username": null,
+    "password": null
+  },
+  "ai": {
+    "enabled": true,
+    "model_path": "models",
+    "batch_size": 1000,
+    "max_workers": 2
+  },
+  "database": {
+    "url": "postgresql+asyncpg://postgres:zalando@192.168.233.133:30199/smart_monitoring",
+    "max_connections": 100,
+    "connection_timeout": 30
+  },
+  "system": {
+    "app_name": "智能监控预警系统",
+    "app_version": "2.0.0",
+    "debug": true,
+    "environment": "development"
+  }
+}
