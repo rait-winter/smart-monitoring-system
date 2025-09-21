@@ -8,7 +8,7 @@
 
 from datetime import datetime
 from typing import Dict, Any, Optional
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, JSON, Float
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -51,6 +51,26 @@ class PrometheusConfig(Base):
     
     def __repr__(self):
         return f"<PrometheusConfig(id={self.id}, name={self.name}, url={self.url})>"
+
+
+class OllamaConfig(Base):
+    """Ollama配置表"""
+    __tablename__ = "ollama_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, comment="配置名称")
+    api_url = Column(String(500), nullable=False, comment="Ollama API地址")
+    model = Column(String(100), nullable=False, comment="AI模型名称")
+    timeout = Column(Integer, default=60000, comment="请求超时时间(毫秒)")
+    max_tokens = Column(Integer, default=2048, comment="最大Token数")
+    temperature = Column(Float, default=0.7, comment="创造性参数")
+    is_enabled = Column(Boolean, default=True, comment="是否启用")
+    is_default = Column(Boolean, default=False, comment="是否为默认配置")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
+    
+    def __repr__(self):
+        return f"<OllamaConfig(id={self.id}, name={self.name}, api_url={self.api_url})>"
 
 
 class AIConfig(Base):

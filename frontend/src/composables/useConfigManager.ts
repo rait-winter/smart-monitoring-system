@@ -26,6 +26,7 @@ export interface PrometheusTarget {
 
 // Ollama配置接口
 export interface OllamaConfig {
+  name?: string
   enabled: boolean
   apiUrl: string
   model: string
@@ -68,6 +69,7 @@ export function useConfigManager() {
 
   // Ollama配置
   const ollamaConfig = ref<OllamaConfig>({
+    name: '',
     enabled: false,
     apiUrl: 'http://localhost:11434',
     model: 'llama3.2',
@@ -221,6 +223,64 @@ export function useConfigManager() {
            databaseConfig.value.postgresql.database
   })
 
+  // 加载Ollama配置
+  const loadOllamaConfig = async () => {
+    try {
+      const response = await apiService.getOllamaConfig()
+      if (response && (response.data || response)) {
+        const config = response.data || response
+        ollamaConfig.value = {
+          name: config.name || '',
+          enabled: config.enabled || false,
+          apiUrl: config.apiUrl || 'http://localhost:11434',
+          model: config.model || 'llama3.2',
+          timeout: config.timeout || 60000,
+          maxTokens: config.maxTokens || 2048,
+          temperature: config.temperature || 0.7
+        }
+      }
+    } catch (error) {
+      console.error('加载Ollama配置失败:', error)
+    }
+  }
+
+  // 保存Ollama配置
+  const saveOllamaConfig = async () => {
+    try {
+      console.log('🔍 准备保存的Ollama配置数据:', ollamaConfig.value)
+      console.log('🔍 配置名称:', ollamaConfig.value.name)
+      
+      const saveResult = await apiService.updateOllamaConfig(ollamaConfig.value)
+      console.log('🔍 保存结果:', saveResult)
+      
+      // 如果保存成功并且返回了配置ID，设置为当前配置
+      if (saveResult?.success && saveResult?.data?.id) {
+        console.log('🔍 设置为当前配置:', saveResult.data.id)
+        await apiService.setCurrentOllamaConfig(saveResult.data.id)
+      }
+      
+      return saveResult?.success || false
+    } catch (error) {
+      console.error('保存Ollama配置失败:', error)
+      return false
+    }
+  }
+
+  // 测试Ollama连接
+  const testOllamaConnection = async () => {
+    try {
+      const result = await apiService.testOllamaConnection(ollamaConfig.value)
+      return result
+    } catch (error) {
+      console.error('测试Ollama连接失败:', error)
+      return {
+        success: false,
+        message: '连接测试失败',
+        details: error instanceof Error ? error.message : '未知错误'
+      }
+    }
+  }
+
   return {
     // 配置状态
     prometheusConfig,
@@ -232,12 +292,17 @@ export function useConfigManager() {
     isOllamaConfigured,
     isDatabaseConfigured,
     
-    // 方法
+    // Prometheus方法
     loadPrometheusConfig,
     savePrometheusConfig,
     testPrometheusConnection,
     addPrometheusTarget,
     removePrometheusTarget,
-    validateConfigName
+    validateConfigName,
+    
+    // Ollama方法
+    loadOllamaConfig,
+    saveOllamaConfig,
+    testOllamaConnection
   }
 }

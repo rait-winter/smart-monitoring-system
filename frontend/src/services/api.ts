@@ -457,6 +457,50 @@ export class ApiService {
     return this.post(`/prometheus/config/set-current/${configId}`)
   }
   
+  // Ollama 配置相关
+  async getOllamaConfig(useCache = true) {
+    if (useCache) {
+      return this.getCached('/ollama/config', {}, 30000) // 30秒缓存
+    }
+    return this.get('/ollama/config')
+  }
+
+  async updateOllamaConfig(config: any) {
+    // 清除相关缓存
+    this.clearCache('/ollama/config')
+    return this.post('/ollama/config', config)
+  }
+  
+  async testOllamaConnection(config: any) {
+    return this.post('/ollama/test', config)
+  }
+
+  // Ollama 配置历史相关
+  async getOllamaConfigHistory(useCache = true) {
+    if (useCache) {
+      return this.getCached('/ollama/config/history', {}, 60000) // 1分钟缓存
+    }
+    return this.get('/ollama/config/history')
+  }
+
+  async setCurrentOllamaConfig(configId: number) {
+    return this.post(`/ollama/config/set-current/${configId}`)
+  }
+
+  async clearOllamaConfigHistory() {
+    return this.delete('/ollama/config/history')
+  }
+
+  // Ollama 聊天相关
+  async chatWithOllama(params: { message: string; config: any }) {
+    return this.post('/ollama/chat', params)
+  }
+
+  // Ollama 模型相关
+  async getOllamaModels(apiUrl: string = 'http://localhost:11434') {
+    return this.get(`/ollama/models?api_url=${encodeURIComponent(apiUrl)}`)
+  }
+  
   // 数据库健康检查
   async checkDatabaseHealth() {
     return this.get('/database/health')

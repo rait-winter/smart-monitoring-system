@@ -389,7 +389,7 @@
               <el-button 
                 size="small" 
                 type="primary" 
-                @click="saveOllamaConfig" 
+                @click="saveOllamaConfigLocal" 
                 :loading="saveOllamaLoading"
               >
                 保存配置
@@ -404,6 +404,20 @@
                 <el-form-item label="启用AI分析">
                   <el-switch v-model="ollamaConfig.enabled" />
                 </el-form-item>
+                <el-form-item label="配置名称" :error="ollamaConfigNameValidation.valid ? '' : ollamaConfigNameValidation.message">
+                  <el-input 
+                    v-model="ollamaConfig.name" 
+                    placeholder="例如：production-ollama"
+                    :disabled="!ollamaConfig.enabled"
+                    maxlength="50"
+                    show-word-limit
+                    :class="{ 'is-error': !ollamaConfigNameValidation.valid }"
+                  />
+                  <div class="form-item-tip">
+                    <el-icon><InfoFilled /></el-icon>
+                    只能包含字母、数字、下划线和短横线，不能以数字或符号开头或结尾
+                  </div>
+                </el-form-item>
                 <el-form-item label="API地址">
                   <el-input 
                     v-model="ollamaConfig.apiUrl" 
@@ -417,17 +431,37 @@
                     style="width: 100%"
                     :disabled="!ollamaConfig.enabled"
                     placeholder="选择AI模型"
+                    :loading="modelsLoading"
+                    @focus="loadAvailableModels"
+                    filterable
                   >
-                    <el-option label="Llama 3.2" value="llama3.2" />
-                    <el-option label="Llama 3.1" value="llama3.1" />
-                    <el-option label="Codellama" value="codellama" />
-                    <el-option label="Mistral" value="mistral" />
-                    <el-option label="Gemma" value="gemma" />
+                    <el-option 
+                      v-for="model in availableModels" 
+                      :key="model.name"
+                      :label="model.label"
+                      :value="model.name"
+                    >
+                      <span style="float: left">{{ model.label }}</span>
+                      <span style="float: right; color: var(--el-text-color-secondary); font-size: 13px">
+                        {{ model.size }}
+                      </span>
+                    </el-option>
+                    <!-- 如果没有模型，显示提示 -->
+                    <el-option 
+                      v-if="!modelsLoading && availableModels.length === 0"
+                      disabled
+                      value=""
+                      label="未找到可用模型，请检查Ollama服务"
+                    />
                   </el-select>
+                  <div class="form-item-tip" v-if="availableModels.length === 0 && !modelsLoading">
+                    <el-icon><InfoFilled /></el-icon>
+                    请先启动Ollama服务并拉取模型
+                  </div>
                 </el-form-item>
                 <el-form-item label="连接测试">
                   <el-button 
-                    @click="testOllamaConnection" 
+                    @click="testOllamaConnectionLocal" 
                     :loading="testOllamaLoading"
                     :disabled="!ollamaConfig.enabled || !ollamaConfig.apiUrl"
                   >
@@ -483,8 +517,13 @@
               </el-col>
             </el-row>
           </el-form>
-          
-          <!-- AI功能配置 -->
+        </el-card>
+        
+        <!-- Ollama配置查看器 -->
+        <OllamaConfigViewerOptimized ref="ollamaConfigViewerRef" />
+        
+        <!-- AI功能配置 -->
+        <el-card>
           <el-divider />
           <div class="ai-features-section">
             <div class="section-header">
@@ -1192,6 +1231,7 @@ import { useConfigManager } from '@/composables/useConfigManager'
 import { useDatabaseManager } from '@/composables/useDatabaseManager'
 import type { PrometheusTarget } from '@/composables/useConfigManager'
 import PrometheusConfigViewerOptimized from '@/components/common/PrometheusConfigViewerOptimized.vue'
+import OllamaConfigViewerOptimized from '@/components/common/OllamaConfigViewerOptimized.vue'
 
 // 使用配置管理器
 const {
@@ -1206,7 +1246,10 @@ const {
   testPrometheusConnection: testConnection,
   addPrometheusTarget,
   removePrometheusTarget,
-  validateConfigName
+  validateConfigName,
+  loadOllamaConfig,
+  saveOllamaConfig,
+  testOllamaConnection
 } = useConfigManager()
 
 // 使用数据库管理器
@@ -1234,6 +1277,7 @@ const saveDbLoading = ref(false)
 const testConnectionLoading = ref(false)
 const testOllamaLoading = ref(false)
 const testDbLoading = ref(false)
+const modelsLoading = ref(false)
 const backupLoading = ref(false)
 const showCreateUser = ref(false)
 const showAddTarget = ref(false)
@@ -1246,14 +1290,27 @@ const dbConnectionStatus = ref<{ success: boolean; message: string } | null>(nul
 
 // 配置名称验证状态
 const configNameValidation = ref<{ valid: boolean; message?: string }>({ valid: true })
+const ollamaConfigNameValidation = ref<{ valid: boolean; message?: string }>({ valid: true })
+
+// Ollama可用模型
+const availableModels = ref<Array<{ name: string; label: string; size?: string }>>([])
+const modelsLoadTime = ref<number>(0)
 
 // 配置查看器引用
 const configViewerRef = ref(null)
+const ollamaConfigViewerRef = ref(null)
 
 // 监听配置名称变化，实时验证
 watch(() => prometheusConfig.value.name, (newName) => {
   if (newName !== undefined) {
     configNameValidation.value = validateConfigName(newName)
+  }
+}, { immediate: true })
+
+// 监听Ollama配置名称变化，实时验证
+watch(() => ollamaConfig.value.name, (newName) => {
+  if (newName !== undefined) {
+    ollamaConfigNameValidation.value = validateConfigName(newName)
   }
 }, { immediate: true })
 
@@ -1640,13 +1697,35 @@ const handleConfigChanged = async (config) => {
 /**
  * 保存Ollama配置
  */
-const saveOllamaConfig = async () => {
+const saveOllamaConfigLocal = async () => {
+  // 验证配置名称
+  if (!ollamaConfigNameValidation.value.valid) {
+    ElMessage.error(ollamaConfigNameValidation.value.message || '配置名称验证失败')
+    return
+  }
+  
+  // 检查是否启用Ollama但未填写配置名称
+  if (ollamaConfig.value.enabled && (!ollamaConfig.value.name || ollamaConfig.value.name.trim() === '')) {
+    ElMessage.error('启用Ollama时必须填写配置名称')
+    return
+  }
+  
   saveOllamaLoading.value = true
   try {
-    // 这里调用API保存Ollama配置
-    console.log('保存Ollama配置:', ollamaConfig.value)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success('Ollama配置已保存')
+    // 调用composable中的保存函数
+    const success = await saveOllamaConfig()
+    if (success) {
+      ElMessage.success('Ollama配置已保存')
+      
+      // 延迟一下确保数据库已更新，然后刷新配置查看器组件
+      setTimeout(async () => {
+        if (ollamaConfigViewerRef.value && typeof ollamaConfigViewerRef.value.refreshConfig === 'function') {
+          await ollamaConfigViewerRef.value.refreshConfig()
+        }
+      }, 500)
+    } else {
+      ElMessage.error('配置保存失败')
+    }
   } catch (error) {
     console.error('保存Ollama配置失败:', error)
     ElMessage.error('配置保存失败')
@@ -1656,28 +1735,107 @@ const saveOllamaConfig = async () => {
 }
 
 /**
+ * 加载可用的Ollama模型
+ */
+const loadAvailableModels = async () => {
+  // 防止重复加载（5分钟内不重新加载）
+  const now = Date.now()
+  if (modelsLoadTime.value && (now - modelsLoadTime.value) < 300000) {
+    return
+  }
+  
+  if (!ollamaConfig.value.enabled || !ollamaConfig.value.apiUrl) {
+    return
+  }
+  
+  modelsLoading.value = true
+  try {
+    // 使用后端API获取模型列表
+    const response = await apiService.getOllamaModels(ollamaConfig.value.apiUrl)
+    
+    if (response?.success && response?.data?.models) {
+      const models = response.data.models
+      
+      availableModels.value = models.map((model: any) => ({
+        name: model.name,
+        label: model.label || model.name,
+        size: formatModelSize(model.size)
+      }))
+      
+      modelsLoadTime.value = now
+      
+      if (models.length > 0) {
+        console.log(`✅ 加载到 ${models.length} 个Ollama模型`)
+        ElMessage.success(`发现 ${models.length} 个可用模型`)
+      } else {
+        console.warn('⚠️ 未找到可用的Ollama模型')
+        ElMessage.warning('未找到可用模型，请检查Ollama服务并拉取模型')
+      }
+    } else {
+      console.error('❌ 获取Ollama模型失败:', response?.message)
+      availableModels.value = []
+      ElMessage.error(response?.message || '获取模型列表失败')
+    }
+  } catch (error) {
+    console.error('❌ 连接Ollama服务失败:', error)
+    availableModels.value = []
+    ElMessage.error('连接Ollama服务失败')
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+/**
+ * 格式化模型大小
+ */
+const formatModelSize = (size: number) => {
+  if (!size) return ''
+  
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let index = 0
+  let sizeValue = size
+  
+  while (sizeValue >= 1024 && index < units.length - 1) {
+    sizeValue /= 1024
+    index++
+  }
+  
+  return `${sizeValue.toFixed(1)}${units[index]}`
+}
+
+/**
  * 测试Ollama连接
  */
-const testOllamaConnection = async () => {
+const testOllamaConnectionLocal = async () => {
   testOllamaLoading.value = true
   ollamaConnectionStatus.value = null
   
   try {
     console.log('测试Ollama连接:', ollamaConfig.value.apiUrl)
     
-    // 模拟API调用
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    // 模拟成功结果(随机失败模拟)
-    const success = Math.random() > 0.3 // 70%成功率
+    // 调用composable中的测试函数
+    const result = await testOllamaConnection()
     
     ollamaConnectionStatus.value = {
-      success,
-      message: success ? '连接成功，模型可用' : '连接失败，请检查Ollama服务'
+      success: result.success || false,
+      message: result.message || '连接测试完成'
     }
     
-    if (success) {
+    if (result.success) {
       ElMessage.success('连接成功！')
+      // 如果测试结果包含模型列表，直接使用
+      if (result.data?.models && Array.isArray(result.data.models)) {
+        availableModels.value = result.data.models.map((model: any) => ({
+          name: model.name,
+          label: model.label || model.name,
+          size: formatModelSize(model.size)
+        }))
+        modelsLoadTime.value = Date.now()
+        console.log(`✅ 从连接测试获取到 ${result.data.models.length} 个模型`)
+      } else {
+        // 否则主动加载模型列表
+        await loadAvailableModels()
+      }
     } else {
       ElMessage.error('连接失败，请检查配置')
     }

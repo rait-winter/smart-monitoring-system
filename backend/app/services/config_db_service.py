@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 import structlog
 
 from app.core.database import AsyncSessionLocal
-from app.models.config import SystemConfig, PrometheusConfig, AIConfig
+from app.models.config import SystemConfig, PrometheusConfig, OllamaConfig, AIConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -429,6 +429,206 @@ class ConfigDBService:
             logger.error("清空配置历史失败", error=str(e))
             await db.rollback()
             raise
+
+    # ==================== Ollama配置管理 ====================
+    
+    async def save_ollama_config(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
+        """保存Ollama配置到数据库"""
+        try:
+            logger.info("🔍 接收到的Ollama配置数据", config_data=config_data)
+            
+            # 提取配置名称
+            raw_name = config_data.get("name", "")
+            name = raw_name.strip() if raw_name else ""
+            logger.info("🔍 提取的Ollama配置名称", name=name, raw_name=raw_name)
+            
+            if not name:
+                return {"success": False, "message": "配置名称不能为空"}
+            
+            name_validation = self.validate_config_name(name)
+            if not name_validation["valid"]:
+                return {"success": False, "message": name_validation["message"]}
+            
+            # 使用引擎直接创建写事务
+            from app.core.database import engine
+            async with engine.begin() as conn:
+                try:
+                    # 检查是否已存在同名配置
+                    result = await conn.execute(
+                        select(OllamaConfig.id).where(OllamaConfig.name == name)
+                    )
+                    existing_config_id = result.scalar_one_or_none()
+                    
+                    if existing_config_id:
+                        # 更新现有同名配置
+                        await conn.execute(
+                            update(OllamaConfig)
+                            .where(OllamaConfig.id == existing_config_id)
+                            .values(
+                                api_url=config_data.get("apiUrl", "http://localhost:11434"),
+                                model=config_data.get("model", "llama3.2"),
+                                timeout=config_data.get("timeout", 60000),
+                                max_tokens=config_data.get("maxTokens", 2048),
+                                temperature=config_data.get("temperature", 0.7),
+                                is_enabled=config_data.get("enabled", True)
+                            )
+                        )
+                        config_id = existing_config_id
+                        logger.info("更新现有Ollama配置", config_name=name, config_id=config_id)
+                    else:
+                        # 检查是否需要设置为默认配置（如果没有其他默认配置）
+                        default_result = await conn.execute(
+                            select(OllamaConfig.id).where(OllamaConfig.is_default == True)
+                        )
+                        has_default = default_result.scalar_one_or_none() is not None
+                        
+                        # 插入新配置
+                        insert_result = await conn.execute(
+                            OllamaConfig.__table__.insert().values(
+                                name=name,
+                                api_url=config_data.get("apiUrl", "http://localhost:11434"),
+                                model=config_data.get("model", "llama3.2"),
+                                timeout=config_data.get("timeout", 60000),
+                                max_tokens=config_data.get("maxTokens", 2048),
+                                temperature=config_data.get("temperature", 0.7),
+                                is_enabled=config_data.get("enabled", True),
+                                is_default=not has_default  # 如果没有默认配置，则设为默认
+                            ).returning(OllamaConfig.id)
+                        )
+                        config_id = insert_result.scalar()
+                        logger.info("创建新Ollama配置", config_name=name, config_id=config_id, is_default=not has_default)
+                    
+                    logger.info("Ollama配置保存成功", config_id=config_id, config_data=config_data)
+                    
+                    return {
+                        "success": True,
+                        "message": "配置保存成功",
+                        "id": config_id,
+                        "config": {
+                            "name": name,
+                            "apiUrl": config_data.get("apiUrl", "http://localhost:11434"),
+                            "model": config_data.get("model", "llama3.2"),
+                            "timeout": config_data.get("timeout", 60000),
+                            "maxTokens": config_data.get("maxTokens", 2048),
+                            "temperature": config_data.get("temperature", 0.7),
+                            "enabled": config_data.get("enabled", True)
+                        }
+                    }
+                except Exception as e:
+                    logger.error("保存Ollama配置时出错", error=str(e))
+                    raise e
+                
+        except Exception as e:
+            logger.error("保存Ollama配置失败", error=str(e))
+            return {
+                "success": False,
+                "message": f"配置保存失败: {str(e)}"
+            }
+    
+    async def get_default_ollama_config(self) -> Dict[str, Any]:
+        """获取默认Ollama配置"""
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(OllamaConfig).where(OllamaConfig.is_default == True)
+                )
+                config = result.scalar_one_or_none()
+                
+                if config:
+                    # 确保配置名称存在且有效
+                    name = config.name
+                    if not name or name.strip() == "" or "?" in name:
+                        name = "默认Ollama配置"
+                    
+                    return {
+                        "name": name,
+                        "enabled": config.is_enabled,
+                        "apiUrl": config.api_url,
+                        "model": config.model,
+                        "timeout": config.timeout,
+                        "maxTokens": config.max_tokens,
+                        "temperature": config.temperature,
+                        "id": config.id,
+                        "updatedAt": config.updated_at.isoformat() if config.updated_at else None
+                    }
+                return None
+        except Exception as e:
+            logger.error("获取默认Ollama配置失败", error=str(e))
+            return None
+    
+    async def get_all_ollama_configs(self) -> List[Dict[str, Any]]:
+        """获取所有Ollama配置"""
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(OllamaConfig).order_by(OllamaConfig.updated_at.desc())
+                )
+                configs = result.scalars().all()
+                
+                config_list = []
+                for config in configs:
+                    # 确保配置名称存在且有效
+                    name = config.name
+                    if not name or name.strip() == "" or "?" in name:
+                        name = f"配置{config.id}"
+                    
+                    config_list.append({
+                        "id": config.id,
+                        "name": name,
+                        "apiUrl": config.api_url,
+                        "model": config.model,
+                        "timeout": config.timeout,
+                        "maxTokens": config.max_tokens,
+                        "temperature": config.temperature,
+                        "enabled": config.is_enabled,
+                        "isDefault": config.is_default,
+                        "createdAt": config.created_at.isoformat() if config.created_at else None,
+                        "updatedAt": config.updated_at.isoformat() if config.updated_at else None
+                    })
+                
+                return config_list
+        except Exception as e:
+            logger.error("获取所有Ollama配置失败", error=str(e))
+            return []
+    
+    async def set_current_ollama_config(self, config_id: int) -> Dict[str, Any]:
+        """设置当前使用的Ollama配置"""
+        logger.info("开始设置当前Ollama配置", config_id=config_id)
+        
+        try:
+            from app.core.database import engine
+            async with engine.begin() as conn:
+                # 首先清除所有配置的默认状态
+                await conn.execute(
+                    update(OllamaConfig).values(is_default=False)
+                )
+                
+                # 设置指定配置为默认
+                result = await conn.execute(
+                    update(OllamaConfig)
+                    .where(OllamaConfig.id == config_id)
+                    .values(is_default=True)
+                )
+                
+                if result.rowcount == 0:
+                    return {
+                        "success": False,
+                        "message": "指定的配置不存在"
+                    }
+                
+                logger.info("设置当前Ollama配置成功", config_id=config_id)
+                
+                return {
+                    "success": True,
+                    "message": "当前配置设置成功"
+                }
+                
+        except Exception as e:
+            logger.error("设置当前Ollama配置失败", error=str(e))
+            return {
+                "success": False,
+                "message": f"设置当前配置失败: {str(e)}"
+            }
 
 
 # 全局配置数据库服务实例
