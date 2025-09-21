@@ -500,6 +500,47 @@ export class ApiService {
   async getOllamaModels(apiUrl: string = 'http://localhost:11434') {
     return this.get(`/ollama/models?api_url=${encodeURIComponent(apiUrl)}`)
   }
+
+  // ==================== 数据库配置相关 ====================
+  
+  // 数据库配置相关
+  async getDatabaseConfig(useCache = true) {
+    if (useCache) {
+      return this.getCached('/database/config', {}, 30000) // 30秒缓存
+    }
+    return this.get('/database/config')
+  }
+
+  async updateDatabaseConfig(config: any) {
+    // 清除相关缓存
+    this.clearCache('/database/config')
+    return this.post('/database/config', config)
+  }
+
+  async testDatabaseConnection(config: any) {
+    return this.post('/database/test', config)
+  }
+
+  // 数据库配置历史相关
+  async getDatabaseConfigHistory(useCache = true) {
+    if (useCache) {
+      return this.getCached('/database/config/history', {}, 60000) // 1分钟缓存
+    }
+    return this.get('/database/config/history')
+  }
+
+  async setCurrentDatabaseConfig(configId: number) {
+    return this.post(`/database/config/set-current/${configId}`)
+  }
+
+  async clearDatabaseConfigHistory() {
+    return this.delete('/database/config/history')
+  }
+
+  // 数据库查询相关
+  async executeDatabaseQuery(params: { query: string; config: any }) {
+    return this.post('/database/query', params)
+  }
   
   // 数据库健康检查
   async checkDatabaseHealth() {

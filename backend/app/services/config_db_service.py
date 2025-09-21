@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 import structlog
 
 from app.core.database import AsyncSessionLocal
-from app.models.config import SystemConfig, PrometheusConfig, OllamaConfig, AIConfig
+from app.models.config import SystemConfig, PrometheusConfig, OllamaConfig, DatabaseConfig, AIConfig
 
 logger = structlog.get_logger(__name__)
 
@@ -625,6 +625,283 @@ class ConfigDBService:
                 
         except Exception as e:
             logger.error("设置当前Ollama配置失败", error=str(e))
+            return {
+                "success": False,
+                "message": f"设置当前配置失败: {str(e)}"
+            }
+
+    # ==================== 数据库配置管理 ====================
+
+    async def save_database_config(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
+        """保存/更新数据库配置"""
+        try:
+            logger.info("保存数据库配置", config_data=config_data)
+            
+            # 提取配置数据
+            name = config_data.get("name", "").strip()
+            postgresql_config = config_data.get("postgresql", {})
+            backup_config = config_data.get("backup", {})
+            
+            logger.debug("提取的配置名称", name=name)
+            
+            # 验证配置名称
+            if not name:
+                return {
+                    "success": False,
+                    "message": "配置名称不能为空"
+                }
+            
+            validation_result = self.validate_config_name(name)
+            if not validation_result["valid"]:
+                return {
+                    "success": False,
+                    "message": validation_result["message"]
+                }
+            
+            from app.core.database import engine
+            async with engine.begin() as conn:
+                db = AsyncSession(bind=conn)
+                
+                # 检查是否存在同名配置
+                result = await db.execute(
+                    select(DatabaseConfig.id).where(DatabaseConfig.name == name)
+                )
+                existing_config_id = result.scalar_one_or_none()
+                
+                config_dict = {
+                    "name": name,
+                    "host": postgresql_config.get("host", "localhost"),
+                    "port": postgresql_config.get("port", 5432),
+                    "database_name": postgresql_config.get("database", "monitoring"),
+                    "username": postgresql_config.get("username", "postgres"),
+                    "password": postgresql_config.get("password", ""),
+                    "ssl_enabled": postgresql_config.get("ssl", False),
+                    "connection_timeout": 30000,  # 固定值
+                    "query_timeout": 60000,  # 固定值
+                    "pool_size": 20,  # 固定值
+                    "backup_enabled": backup_config.get("enabled", True),
+                    "backup_schedule": backup_config.get("schedule", "0 2 * * *"),
+                    "backup_retention": backup_config.get("retention", 30),
+                    "backup_path": backup_config.get("path", "/data/backups"),
+                    "is_enabled": postgresql_config.get("enabled", True),
+                    "is_default": False  # 初始不设为默认
+                }
+                
+                if existing_config_id:
+                    # 更新现有配置
+                    await db.execute(
+                        update(DatabaseConfig)
+                        .where(DatabaseConfig.id == existing_config_id)
+                        .values(**config_dict)
+                    )
+                    config_id = existing_config_id
+                    logger.info("更新数据库配置成功", config_id=config_id, name=name)
+                else:
+                    # 检查是否是第一个配置，如果是则设为默认
+                    count_result = await db.execute(select(DatabaseConfig.id))
+                    existing_configs = count_result.scalars().all()
+                    
+                    if not existing_configs:
+                        config_dict["is_default"] = True
+                        logger.info("设置为默认数据库配置", name=name)
+                    
+                    # 创建新配置
+                    new_config = DatabaseConfig(**config_dict)
+                    db.add(new_config)
+                    await db.flush()
+                    config_id = new_config.id
+                    logger.info("创建数据库配置成功", config_id=config_id, name=name)
+                
+                return {
+                    "success": True,
+                    "message": "数据库配置保存成功",
+                    "id": config_id,
+                    "name": name
+                }
+                
+        except Exception as e:
+            logger.error("保存数据库配置失败", error=str(e), config_data=config_data)
+            return {
+                "success": False,
+                "message": f"配置保存失败: {str(e)}"
+            }
+
+    async def get_default_database_config(self) -> Dict[str, Any]:
+        """获取默认数据库配置"""
+        try:
+            async with AsyncSessionLocal() as db:
+                # 首先尝试获取默认配置
+                result = await db.execute(
+                    select(DatabaseConfig).where(DatabaseConfig.is_default == True)
+                )
+                config = result.scalars().first()
+                
+                if not config:
+                    # 如果没有默认配置，获取最新的一个
+                    result = await db.execute(
+                        select(DatabaseConfig).order_by(DatabaseConfig.updated_at.desc())
+                    )
+                    config = result.scalars().first()
+                
+                if config:
+                    # 确保名称不为空或异常
+                    config_name = config.name
+                    if not config_name or config_name.strip() == "" or "?" in config_name:
+                        config_name = "默认数据库配置"
+                    
+                    return {
+                        "id": config.id,
+                        "name": config_name,
+                        "host": config.host,
+                        "port": config.port,
+                        "database": config.database_name,
+                        "username": config.username,
+                        "password": config.password,
+                        "ssl": config.ssl_enabled,
+                        "connectionTimeout": config.connection_timeout,
+                        "queryTimeout": config.query_timeout,
+                        "poolSize": config.pool_size,
+                        "backupEnabled": config.backup_enabled,
+                        "backupSchedule": config.backup_schedule,
+                        "backupRetention": config.backup_retention,
+                        "backupPath": config.backup_path,
+                        "enabled": config.is_enabled,
+                        "isDefault": config.is_default,
+                        "updatedAt": config.updated_at.isoformat() if config.updated_at else None
+                    }
+                    
+                return None
+                
+        except Exception as e:
+            logger.error("获取默认数据库配置失败", error=str(e))
+            # 如果数据库连接失败，尝试从环境变量获取配置
+            import os
+            database_url = os.environ.get('DATABASE_URL', '')
+            if database_url and 'postgresql' in database_url:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(database_url)
+                    logger.info("使用环境变量数据库配置", database_url=database_url)
+                    return {
+                        "id": 0,
+                        "name": "环境变量配置",
+                        "host": parsed.hostname or "localhost",
+                        "port": parsed.port or 5432,
+                        "database": parsed.path.lstrip('/') if parsed.path else "smart_monitoring",
+                        "username": parsed.username or "postgres",
+                        "password": parsed.password or "",
+                        "ssl": 'sslmode=require' in database_url,
+                        "connectionTimeout": 30000,
+                        "queryTimeout": 60000,
+                        "poolSize": 20,
+                        "backupEnabled": False,
+                        "backupSchedule": "0 2 * * *",
+                        "backupRetention": 30,
+                        "backupPath": "/data/backups",
+                        "enabled": True,
+                        "isDefault": True,
+                        "updatedAt": None
+                    }
+                except Exception as parse_error:
+                    logger.error("解析DATABASE_URL失败", error=str(parse_error))
+            
+            return None
+
+    async def get_all_database_configs(self) -> List[Dict[str, Any]]:
+        """获取所有数据库配置"""
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(DatabaseConfig).order_by(DatabaseConfig.updated_at.desc())
+                )
+                configs = result.scalars().all()
+                
+                config_list = []
+                for config in configs:
+                    # 确保名称不为空或异常
+                    config_name = config.name
+                    if not config_name or config_name.strip() == "" or "?" in config_name:
+                        config_name = f"数据库配置_{config.id}"
+                    
+                    config_list.append({
+                        "id": config.id,
+                        "name": config_name,
+                        "host": config.host,
+                        "port": config.port,
+                        "database": config.database_name,
+                        "username": config.username,
+                        "ssl": config.ssl_enabled,
+                        "enabled": config.is_enabled,
+                        "isDefault": config.is_default,
+                        "updatedAt": config.updated_at.isoformat() if config.updated_at else None,
+                        "createdAt": config.created_at.isoformat() if config.created_at else None
+                    })
+                
+                logger.info("获取数据库配置列表成功", count=len(config_list))
+                return config_list
+                
+        except Exception as e:
+            logger.error("获取数据库配置列表失败", error=str(e))
+            # 如果数据库连接失败，尝试从环境变量返回配置
+            import os
+            database_url = os.environ.get('DATABASE_URL', '')
+            if database_url and 'postgresql' in database_url:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(database_url)
+                    return [{
+                        "id": 0,
+                        "name": "环境变量配置",
+                        "host": parsed.hostname or "localhost",
+                        "port": parsed.port or 5432,
+                        "database": parsed.path.lstrip('/') if parsed.path else "smart_monitoring",
+                        "username": parsed.username or "postgres",
+                        "ssl": 'sslmode=require' in database_url,
+                        "enabled": True,
+                        "isDefault": True,
+                        "updatedAt": None,
+                        "createdAt": None
+                    }]
+                except Exception:
+                    pass
+            return []
+
+    async def set_current_database_config(self, config_id: int) -> Dict[str, Any]:
+        """设置当前使用的数据库配置"""
+        try:
+            logger.info("设置当前数据库配置", config_id=config_id)
+            
+            from app.core.database import engine
+            async with engine.begin() as conn:
+                db = AsyncSession(bind=conn)
+                
+                # 首先取消所有配置的默认状态
+                await db.execute(
+                    update(DatabaseConfig).values(is_default=False)
+                )
+                
+                # 设置指定配置为默认
+                result = await db.execute(
+                    update(DatabaseConfig)
+                    .where(DatabaseConfig.id == config_id)
+                    .values(is_default=True)
+                )
+                
+                if result.rowcount == 0:
+                    return {
+                        "success": False,
+                        "message": "配置不存在"
+                    }
+                
+                logger.info("设置当前数据库配置成功", config_id=config_id)
+                
+                return {
+                    "success": True,
+                    "message": "当前配置设置成功"
+                }
+                
+        except Exception as e:
+            logger.error("设置当前数据库配置失败", error=str(e))
             return {
                 "success": False,
                 "message": f"设置当前配置失败: {str(e)}"

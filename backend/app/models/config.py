@@ -56,7 +56,7 @@ class PrometheusConfig(Base):
 class OllamaConfig(Base):
     """Ollama配置表"""
     __tablename__ = "ollama_configs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, comment="配置名称")
     api_url = Column(String(500), nullable=False, comment="Ollama API地址")
@@ -68,9 +68,37 @@ class OllamaConfig(Base):
     is_default = Column(Boolean, default=False, comment="是否为默认配置")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
-    
+
     def __repr__(self):
         return f"<OllamaConfig(id={self.id}, name={self.name}, api_url={self.api_url})>"
+
+
+class DatabaseConfig(Base):
+    """数据库配置表"""
+    __tablename__ = "database_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False, comment="配置名称")
+    host = Column(String(255), nullable=False, comment="数据库主机地址")
+    port = Column(Integer, nullable=False, default=5432, comment="数据库端口")
+    database_name = Column(String(100), nullable=False, comment="数据库名称")
+    username = Column(String(100), nullable=False, comment="用户名")
+    password = Column(String(255), nullable=False, comment="密码")
+    ssl_enabled = Column(Boolean, default=False, comment="是否启用SSL")
+    connection_timeout = Column(Integer, default=30000, comment="连接超时时间(毫秒)")
+    query_timeout = Column(Integer, default=60000, comment="查询超时时间(毫秒)")
+    pool_size = Column(Integer, default=20, comment="连接池大小")
+    backup_enabled = Column(Boolean, default=True, comment="是否启用备份")
+    backup_schedule = Column(String(50), default='0 2 * * *', comment="备份计划(Cron表达式)")
+    backup_retention = Column(Integer, default=30, comment="备份保留天数")
+    backup_path = Column(String(500), default='/data/backups', comment="备份路径")
+    is_enabled = Column(Boolean, default=True, comment="是否启用")
+    is_default = Column(Boolean, default=False, comment="是否为默认配置")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
+
+    def __repr__(self):
+        return f"<DatabaseConfig(id={self.id}, name={self.name}, host={self.host})>"
 
 
 class AIConfig(Base):

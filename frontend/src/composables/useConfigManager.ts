@@ -37,6 +37,7 @@ export interface OllamaConfig {
 
 // 数据库配置接口
 export interface DatabaseConfig {
+  name?: string
   postgresql: {
     enabled: boolean
     host: string
@@ -80,6 +81,7 @@ export function useConfigManager() {
 
   // 数据库配置
   const databaseConfig = ref<DatabaseConfig>({
+    name: '',
     postgresql: {
       enabled: true,
       host: 'localhost',
@@ -281,6 +283,82 @@ export function useConfigManager() {
     }
   }
 
+  // 加载数据库配置
+  const loadDatabaseConfig = async () => {
+    try {
+      console.log('🔄 加载数据库配置...')
+      const response = await apiService.getDatabaseConfig()
+      console.log('🔍 数据库配置API响应:', response)
+      
+      if (response?.success && response?.data) {
+        // 正确访问数据结构：response.data.config
+        const config = response.data.config || response.data
+        console.log('🔍 解析的配置数据:', config)
+        
+        if (config && config.postgresql) {
+          databaseConfig.value = {
+            name: config.name || '',
+            postgresql: {
+              enabled: config.postgresql?.enabled ?? true,
+              host: config.postgresql?.host || 'localhost',
+              port: config.postgresql?.port || 5432,
+              database: config.postgresql?.database || 'monitoring',
+              username: config.postgresql?.username || 'postgres',
+              password: config.postgresql?.password || '',
+              ssl: config.postgresql?.ssl ?? false
+            },
+            backup: {
+              enabled: config.backup?.enabled ?? true,
+              schedule: config.backup?.schedule || '0 2 * * *',
+              retention: config.backup?.retention || 30,
+              path: config.backup?.path || '/data/backups'
+            }
+          }
+          console.log('✅ 数据库配置加载成功:', databaseConfig.value)
+        } else {
+          console.log('⚠️ 配置格式不正确，使用默认配置')
+        }
+      } else {
+        console.log('⚠️ 未找到有效的数据库配置响应')
+      }
+    } catch (error) {
+      console.error('❌ 加载数据库配置失败:', error)
+    }
+  }
+
+  // 保存数据库配置
+  const saveDatabaseConfig = async () => {
+    try {
+      console.log('🔍 准备保存的数据库配置数据:', databaseConfig.value)
+      console.log('🔍 配置名称:', databaseConfig.value.name)
+      
+      const saveResult = await apiService.updateDatabaseConfig(databaseConfig.value)
+      console.log('🔍 保存结果:', saveResult)
+      
+      // 如果保存成功并且返回了配置ID，设置为当前配置
+      if (saveResult?.success && saveResult?.data?.id) {
+        console.log('🔍 设置为当前配置:', saveResult.data.id)
+        await apiService.setCurrentDatabaseConfig(saveResult.data.id)
+      }
+      
+      return saveResult?.success || false
+    } catch (error) {
+      console.error('保存数据库配置失败:', error)
+      return false
+    }
+  }
+
+  // 测试数据库连接
+  const testDatabaseConnection = async () => {
+    try {
+      const response = await apiService.testDatabaseConnection(databaseConfig.value)
+      return response
+    } catch (error) {
+      console.error('测试数据库连接失败:', error)
+      return { success: false, message: '连接测试失败' }
+    }
+  }
+
   return {
     // 配置状态
     prometheusConfig,
@@ -303,6 +381,11 @@ export function useConfigManager() {
     // Ollama方法
     loadOllamaConfig,
     saveOllamaConfig,
-    testOllamaConnection
+    testOllamaConnection,
+    
+    // 数据库方法
+    loadDatabaseConfig,
+    saveDatabaseConfig,
+    testDatabaseConnection
   }
 }

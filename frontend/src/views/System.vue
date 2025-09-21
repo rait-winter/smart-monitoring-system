@@ -620,7 +620,7 @@
               <div class="header-actions">
                 <el-button 
                   size="small" 
-                  @click="testDatabaseConnection" 
+                  @click="testDatabaseConnectionLocal" 
                   :loading="testDbLoading"
                 >
                   测试连接
@@ -628,7 +628,7 @@
                 <el-button 
                   size="small" 
                   type="primary" 
-                  @click="saveDatabaseConfig" 
+                  @click="saveDatabaseConfigLocal" 
                   :loading="saveDbLoading"
                 >
                   保存配置
@@ -637,10 +637,41 @@
             </div>
           </template>
           
-          <el-form :model="databaseConfig" label-width="150px" class="config-form">
+          <!-- 加载状态 -->
+          <div v-if="loadDbConfigLoading" class="loading-skeleton">
+            <el-skeleton :rows="8" animated>
+              <template #template>
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+                <el-skeleton-item style="height: 40px; margin-bottom: 16px;" />
+              </template>
+            </el-skeleton>
+          </div>
+          
+          <!-- 配置表单 -->
+          <el-form v-else :model="databaseConfig" label-width="150px" class="config-form">
             <el-row :gutter="40">
               <el-col :span="12">
                 <h4>连接配置</h4>
+                <el-form-item label="配置名称" :error="databaseConfigNameValidation.valid ? '' : databaseConfigNameValidation.message">
+                  <el-input
+                    v-model="databaseConfig.name"
+                    placeholder="例如：production-database"
+                    :disabled="!databaseConfig.postgresql.enabled"
+                    maxlength="50"
+                    show-word-limit
+                    :class="{ 'is-error': !databaseConfigNameValidation.valid }"
+                  />
+                  <div class="form-item-tip">
+                    <el-icon><InfoFilled /></el-icon>
+                    只能包含字母、数字、下划线和短横线，不能以数字或符号开头或结尾
+                  </div>
+                </el-form-item>
                 <el-form-item label="启用数据库">
                   <el-switch v-model="databaseConfig.postgresql.enabled" />
                 </el-form-item>
@@ -902,6 +933,9 @@
             </el-row>
           </div>
         </el-card>
+        
+        <!-- PostgreSQL配置查看器 -->
+        <PostgreSQLConfigViewerOptimized ref="databaseConfigViewerRef" />
       </el-tab-pane>
       
       <el-tab-pane label="系统配置" name="config">
@@ -1232,6 +1266,7 @@ import { useDatabaseManager } from '@/composables/useDatabaseManager'
 import type { PrometheusTarget } from '@/composables/useConfigManager'
 import PrometheusConfigViewerOptimized from '@/components/common/PrometheusConfigViewerOptimized.vue'
 import OllamaConfigViewerOptimized from '@/components/common/OllamaConfigViewerOptimized.vue'
+import PostgreSQLConfigViewerOptimized from '@/components/common/PostgreSQLConfigViewerOptimized.vue'
 
 // 使用配置管理器
 const {
@@ -1249,7 +1284,10 @@ const {
   validateConfigName,
   loadOllamaConfig,
   saveOllamaConfig,
-  testOllamaConnection
+  testOllamaConnection,
+  loadDatabaseConfig,
+  saveDatabaseConfig,
+  testDatabaseConnection
 } = useConfigManager()
 
 // 使用数据库管理器
@@ -1277,6 +1315,7 @@ const saveDbLoading = ref(false)
 const testConnectionLoading = ref(false)
 const testOllamaLoading = ref(false)
 const testDbLoading = ref(false)
+const loadDbConfigLoading = ref(false)
 const modelsLoading = ref(false)
 const backupLoading = ref(false)
 const showCreateUser = ref(false)
@@ -1291,6 +1330,7 @@ const dbConnectionStatus = ref<{ success: boolean; message: string } | null>(nul
 // 配置名称验证状态
 const configNameValidation = ref<{ valid: boolean; message?: string }>({ valid: true })
 const ollamaConfigNameValidation = ref<{ valid: boolean; message?: string }>({ valid: true })
+const databaseConfigNameValidation = ref<{ valid: boolean; message?: string }>({ valid: true })
 
 // Ollama可用模型
 const availableModels = ref<Array<{ name: string; label: string; size?: string }>>([])
@@ -1299,6 +1339,7 @@ const modelsLoadTime = ref<number>(0)
 // 配置查看器引用
 const configViewerRef = ref(null)
 const ollamaConfigViewerRef = ref(null)
+const databaseConfigViewerRef = ref(null)
 
 // 监听配置名称变化，实时验证
 watch(() => prometheusConfig.value.name, (newName) => {
@@ -1311,6 +1352,12 @@ watch(() => prometheusConfig.value.name, (newName) => {
 watch(() => ollamaConfig.value.name, (newName) => {
   if (newName !== undefined) {
     ollamaConfigNameValidation.value = validateConfigName(newName)
+  }
+}, { immediate: true })
+
+watch(() => databaseConfig.value.name, (newName) => {
+  if (newName !== undefined) {
+    databaseConfigNameValidation.value = validateConfigName(newName)
   }
 }, { immediate: true })
 
@@ -1369,49 +1416,7 @@ const exportLoading = ref({
   analysis: false
 })
 
-// 数据库状态信息
-const testDatabaseConnection = async () => {
-  testDbLoading.value = true
-  dbConnectionStatus.value = null
-  
-  try {
-    const success = await testDbConnection()
-    dbConnectionStatus.value = {
-      success,
-      message: success ? '连接成功' : '连接失败'
-    }
-    
-    if (success) {
-      ElMessage.success('数据库连接测试成功！')
-    } else {
-      ElMessage.error('数据库连接失败，请检查配置')
-    }
-  } catch (error) {
-    dbConnectionStatus.value = {
-      success: false,
-      message: '连接失败'
-    }
-    ElMessage.error('连接测试失败')
-  } finally {
-    testDbLoading.value = false
-  }
-}
 
-// 保存数据库配置
-const saveDatabaseConfig = async () => {
-  saveDbLoading.value = true
-  try {
-    // 这里调用API保存数据库配置
-    console.log('保存数据库配置:', databaseConfig.value)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success('数据库配置已保存')
-  } catch (error) {
-    console.error('保存数据库配置失败:', error)
-    ElMessage.error('配置保存失败')
-  } finally {
-    saveDbLoading.value = false
-  }
-}
 
 // 备份数据库
 const backupDatabase = async () => {
@@ -1851,6 +1856,71 @@ const testOllamaConnectionLocal = async () => {
 }
 
 /**
+ * 保存数据库配置
+ */
+const saveDatabaseConfigLocal = async () => {
+  if (!databaseConfigNameValidation.value.valid) {
+    ElMessage.error(databaseConfigNameValidation.value.message || '配置名称验证失败')
+    return
+  }
+  if (databaseConfig.value.postgresql.enabled && (!databaseConfig.value.name || databaseConfig.value.name.trim() === '')) {
+    ElMessage.error('启用数据库时必须填写配置名称')
+    return
+  }
+  saveDbLoading.value = true
+  try {
+    const success = await saveDatabaseConfig()
+    if (success) {
+      ElMessage.success('数据库配置已保存')
+      setTimeout(async () => {
+        if (databaseConfigViewerRef.value && typeof databaseConfigViewerRef.value.refreshConfig === 'function') {
+          await databaseConfigViewerRef.value.refreshConfig()
+        }
+      }, 500)
+    } else {
+      ElMessage.error('配置保存失败')
+    }
+  } catch (error) {
+    console.error('保存数据库配置失败:', error)
+    ElMessage.error('配置保存失败')
+  } finally {
+    saveDbLoading.value = false
+  }
+}
+
+/**
+ * 测试数据库连接
+ */
+const testDatabaseConnectionLocal = async () => {
+  testDbLoading.value = true
+  dbConnectionStatus.value = null
+
+  try {
+    console.log('测试数据库连接:', databaseConfig.value.postgresql.host)
+    const result = await testDatabaseConnection()
+
+    dbConnectionStatus.value = {
+      success: result.success || false,
+      message: result.message || '连接测试完成'
+    }
+
+    if (result.success) {
+      ElMessage.success('连接成功！')
+    } else {
+      ElMessage.error('连接失败，请检查配置')
+    }
+  } catch (error) {
+    dbConnectionStatus.value = {
+      success: false,
+      message: '连接失败'
+    }
+    ElMessage.error('连接测试失败')
+  } finally {
+    testDbLoading.value = false
+  }
+}
+
+/**
  * 测试Prometheus连接
  */
 const testPrometheusConnection = async () => {
@@ -2276,6 +2346,23 @@ const initializePage = async () => {
       id: 'prometheus-config',
       name: '加载Prometheus配置',
       execute: () => performanceMonitor.measureAsync('load-prometheus-config', () => loadPrometheusConfig())
+    },
+    {
+      id: 'ollama-config',
+      name: '加载Ollama配置',
+      execute: () => performanceMonitor.measureAsync('load-ollama-config', () => loadOllamaConfig())
+    },
+    {
+      id: 'database-config',
+      name: '加载数据库配置',
+      execute: () => performanceMonitor.measureAsync('load-database-config', async () => {
+        loadDbConfigLoading.value = true
+        try {
+          await loadDatabaseConfig()
+        } finally {
+          loadDbConfigLoading.value = false
+        }
+      })
     }
   ])
   
@@ -2330,6 +2417,11 @@ onMounted(() => {
   // 使用优化的初始化函数
   initializePage()
 })
+
+// 调试信息 - 监听databaseConfig变化
+watch(() => databaseConfig.value, (newValue) => {
+  console.log('🔍 数据库配置变化:', newValue)
+}, { deep: true })
 </script>
 
 <style scoped lang="scss">
@@ -2764,6 +2856,16 @@ onMounted(() => {
 @media (max-width: 768px) {
   .config-viewer-section {
     margin-top: 16px;
+  }
+}
+
+// 加载状态样式
+.loading-skeleton {
+  padding: 20px;
+  
+  .el-skeleton {
+    --el-skeleton-color: #f2f2f2;
+    --el-skeleton-to-color: #e6e6e6;
   }
 }
 </style>
