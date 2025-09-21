@@ -4,6 +4,7 @@ import { apiService } from '@/services/api'
 // Prometheus配置接口
 export interface PrometheusConfig {
   enabled: boolean
+  name?: string  // 配置名称，字母+符号，不使用中文
   url: string
   username?: string
   password?: string
@@ -57,6 +58,7 @@ export function useConfigManager() {
   // Prometheus配置
   const prometheusConfig = ref<PrometheusConfig>({
     enabled: false,
+    name: '',  // 默认为空，用户需要填写
     url: 'http://localhost:9090',
     timeout: 30000,
     scrapeInterval: '15s',
@@ -93,6 +95,40 @@ export function useConfigManager() {
     }
   })
 
+  // 配置名称验证函数
+  const validateConfigName = (name: string): { valid: boolean; message?: string } => {
+    if (!name || name.trim() === '') {
+      return { valid: false, message: '配置名称不能为空' }
+    }
+    
+    // 只允许字母、数字、下划线、短横线
+    const namePattern = /^[a-zA-Z0-9_-]+$/
+    if (!namePattern.test(name)) {
+      return { valid: false, message: '配置名称只能包含字母、数字、下划线(_)和短横线(-)' }
+    }
+    
+    // 长度限制
+    if (name.length < 2) {
+      return { valid: false, message: '配置名称至少需要2个字符' }
+    }
+    
+    if (name.length > 50) {
+      return { valid: false, message: '配置名称不能超过50个字符' }
+    }
+    
+    // 不能以数字开头
+    if (/^[0-9]/.test(name)) {
+      return { valid: false, message: '配置名称不能以数字开头' }
+    }
+    
+    // 不能以特殊符号开头或结尾
+    if (/^[-_]|[-_]$/.test(name)) {
+      return { valid: false, message: '配置名称不能以下划线或短横线开头/结尾' }
+    }
+    
+    return { valid: true }
+  }
+
   // 加载配置
   const loadPrometheusConfig = async () => {
     try {
@@ -118,8 +154,19 @@ export function useConfigManager() {
   // 保存Prometheus配置
   const savePrometheusConfig = async () => {
     try {
-      await apiService.updatePrometheusConfig(prometheusConfig.value)
-      return true
+      console.log('🔍 准备保存的配置数据:', prometheusConfig.value)
+      console.log('🔍 配置名称:', prometheusConfig.value.name)
+      
+      const saveResult = await apiService.updatePrometheusConfig(prometheusConfig.value)
+      console.log('🔍 保存结果:', saveResult)
+      
+      // 如果保存成功并且返回了配置ID，设置为当前配置
+      if (saveResult?.success && saveResult?.data?.id) {
+        console.log('🔍 设置为当前配置:', saveResult.data.id)
+        await apiService.setCurrentPrometheusConfig(saveResult.data.id)
+      }
+      
+      return saveResult?.success || false
     } catch (error) {
       console.error('保存Prometheus配置失败:', error)
       return false
@@ -190,6 +237,7 @@ export function useConfigManager() {
     savePrometheusConfig,
     testPrometheusConnection,
     addPrometheusTarget,
-    removePrometheusTarget
+    removePrometheusTarget,
+    validateConfigName
   }
 }

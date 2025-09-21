@@ -32,11 +32,34 @@ import { setupECharts } from '@/utils/echarts'
 // 错误处理
 import { setupErrorHandler } from '@/utils/errorHandler'
 
+// 性能优化工具
+import { setupRequestManager } from '@/utils/requestManager'
+import { setupPerformanceMonitor } from '@/utils/performanceMonitor'
+import { setupLoadingOptimizer } from '@/utils/loadingOptimizer'
+
 // NProgress配置
 NProgress.configure({ 
   showSpinner: false,
   minimum: 0.1,
   speed: 500,
+})
+
+// 抑制 ResizeObserver 的无害错误
+const resizeObserverErrHandler = (e: ErrorEvent) => {
+  if (e.message === 'ResizeObserver loop completed with undelivered notifications.') {
+    e.stopImmediatePropagation()
+    return true
+  }
+  return false
+}
+
+window.addEventListener('error', resizeObserverErrHandler)
+
+// 处理 ResizeObserver 的 unhandled promise rejection
+window.addEventListener('unhandledrejection', (e) => {
+  if (e.reason?.message === 'ResizeObserver loop completed with undelivered notifications.') {
+    e.preventDefault()
+  }
 })
 
 async function bootstrap() {
@@ -57,6 +80,11 @@ async function bootstrap() {
   
   // 设置错误处理
   setupErrorHandler(app)
+  
+  // 设置性能优化工具
+  setupRequestManager(app)
+  setupPerformanceMonitor(app)
+  setupLoadingOptimizer(app)
   
   // 挂载应用
   app.mount('#app')

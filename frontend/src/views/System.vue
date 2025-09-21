@@ -208,6 +208,23 @@
                 <el-form-item label="启用Prometheus">
                   <el-switch v-model="prometheusConfig.enabled" />
                 </el-form-item>
+                <el-form-item 
+                  label="配置名称" 
+                  :error="!configNameValidation.valid ? configNameValidation.message : ''"
+                >
+                  <el-input 
+                    v-model="prometheusConfig.name" 
+                    placeholder="例如: prod-prometheus, dev-monitor"
+                    :disabled="!prometheusConfig.enabled"
+                    :class="{ 'is-error': !configNameValidation.valid }"
+                    maxlength="50"
+                    show-word-limit
+                  />
+                  <div class="form-item-tip">
+                    <el-icon><InfoFilled /></el-icon>
+                    <span>只能包含字母、数字、下划线(_)和短横线(-)，不能以数字或符号开头/结尾</span>
+                  </div>
+                </el-form-item>
                 <el-form-item label="服务器地址">
                   <el-input 
                     v-model="prometheusConfig.url" 
@@ -351,6 +368,13 @@
             </el-table>
           </div>
         </el-card>
+
+        <!-- Prometheus配置查看器 -->
+        <PrometheusConfigViewerOptimized 
+          ref="configViewerRef"
+          @configChanged="handleConfigChanged"
+          class="config-viewer-section"
+        />
       </el-tab-pane>
       
       <!-- AI配置 -->
@@ -1141,7 +1165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Tools,
@@ -1158,11 +1182,16 @@ import {
   DataAnalysis,
   Setting,
   DataBoard,
-  FolderOpened
+  FolderOpened,
+  InfoFilled
 } from '@element-plus/icons-vue'
+import { useLoadingOptimizer } from '@/utils/loadingOptimizer'
+import { requestManager } from '@/utils/requestManager'
+import { performanceMonitor } from '@/utils/performanceMonitor'
 import { useConfigManager } from '@/composables/useConfigManager'
 import { useDatabaseManager } from '@/composables/useDatabaseManager'
 import type { PrometheusTarget } from '@/composables/useConfigManager'
+import PrometheusConfigViewerOptimized from '@/components/common/PrometheusConfigViewerOptimized.vue'
 
 // 使用配置管理器
 const {
@@ -1176,7 +1205,8 @@ const {
   savePrometheusConfig,
   testPrometheusConnection: testConnection,
   addPrometheusTarget,
-  removePrometheusTarget
+  removePrometheusTarget,
+  validateConfigName
 } = useConfigManager()
 
 // 使用数据库管理器
@@ -1189,6 +1219,9 @@ const {
   exportData: exportDbData,
   backupDatabase: performBackup
 } = useDatabaseManager()
+
+// 使用加载优化器
+const { loadingOptimizer, loadingState, addTask, executeAll } = useLoadingOptimizer()
 
 // 响应式数据
 const activeTab = ref('services')
@@ -1210,6 +1243,19 @@ const editingTarget = ref<PrometheusTarget | null>(null)
 const connectionStatus = ref<{ success: boolean; message: string } | null>(null)
 const ollamaConnectionStatus = ref<{ success: boolean; message: string } | null>(null)
 const dbConnectionStatus = ref<{ success: boolean; message: string } | null>(null)
+
+// 配置名称验证状态
+const configNameValidation = ref<{ valid: boolean; message?: string }>({ valid: true })
+
+// 配置查看器引用
+const configViewerRef = ref(null)
+
+// 监听配置名称变化，实时验证
+watch(() => prometheusConfig.value.name, (newName) => {
+  if (newName !== undefined) {
+    configNameValidation.value = validateConfigName(newName)
+  }
+}, { immediate: true })
 
 // 监控目标表单
 const targetForm = ref({
@@ -1538,14 +1584,34 @@ const systemLogs = ref([
  * 保存Prometheus配置
  */
 const savePrometheusConfigLocal = async () => {
+  // 验证配置名称
+  if (!configNameValidation.value.valid) {
+    ElMessage.error(configNameValidation.value.message || '配置名称验证失败')
+    return
+  }
+  
+  // 检查是否启用Prometheus但未填写配置名称
+  if (prometheusConfig.value.enabled && (!prometheusConfig.value.name || prometheusConfig.value.name.trim() === '')) {
+    ElMessage.error('启用Prometheus时必须填写配置名称')
+    return
+  }
+  
   savePrometheusLoading.value = true
   try {
     // 调用composable中的保存函数
     const success = await savePrometheusConfig()
     if (success) {
       ElMessage.success('Prometheus配置已保存')
-      // 保存成功后重新加载配置，更新页面显示
-      await loadPrometheusConfig()
+      
+      // 延迟一下确保数据库已更新，然后刷新配置查看器组件
+      setTimeout(async () => {
+        if (configViewerRef.value && typeof configViewerRef.value.refreshConfig === 'function') {
+          await configViewerRef.value.refreshConfig()
+        }
+      }, 500)
+      
+      // 不立即重新加载配置，避免覆盖用户输入
+      // await loadPrometheusConfig()
     } else {
       ElMessage.error('配置保存失败')
     }
@@ -1554,6 +1620,20 @@ const savePrometheusConfigLocal = async () => {
     ElMessage.error('配置保存失败')
   } finally {
     savePrometheusLoading.value = false
+  }
+}
+
+/**
+ * 处理配置更改事件
+ */
+const handleConfigChanged = async (config) => {
+  try {
+    // 重新加载当前配置
+    await loadPrometheusConfig()
+    ElMessage.success(`配置已切换到 "${config.name}"`)
+  } catch (error) {
+    console.error('配置切换后重新加载失败:', error)
+    ElMessage.error('配置切换成功，但重新加载失败，请手动刷新页面')
   }
 }
 
@@ -2025,16 +2105,72 @@ const formatUptime = (seconds: number): string => {
   }
 }
 
-// 生命周期钩子
-onMounted(async () => {
+// 优化的页面初始化函数
+const initializePage = async () => {
   document.title = '系统管理 - 智能监控预警系统'
   
-  // 加载配置
+  // 创建页面加载策略
+  const pageStrategy = loadingOptimizer.createPageLoadStrategy('system-page')
+  
+  // 关键数据：立即加载
+  pageStrategy.critical([
+    {
+      id: 'prometheus-config',
+      name: '加载Prometheus配置',
+      execute: () => performanceMonitor.measureAsync('load-prometheus-config', () => loadPrometheusConfig())
+    }
+  ])
+  
+  // 次要数据：延迟加载
+  pageStrategy.deferred([
+    {
+      id: 'system-health',
+      name: '检查系统健康状态',
+      execute: () => performanceMonitor.measureAsync('check-system-health', async () => {
+        try {
+          const health = requestManager.getServiceHealth()
+          console.log('系统健康状态:', health)
+          return health
+        } catch (error) {
+          console.warn('健康检查失败:', error)
+          return null
+        }
+      })
+    }
+  ])
+  
+  // 可选数据：后台加载
+  pageStrategy.optional([
+    {
+      id: 'performance-stats',
+      name: '收集性能统计',
+      execute: () => performanceMonitor.measureAsync('collect-perf-stats', async () => {
+        const stats = performanceMonitor.getStats()
+        console.log('性能统计:', stats)
+        return stats
+      })
+    }
+  ])
+  
+  // 执行加载策略
   try {
-    await loadPrometheusConfig()
+    const results = await pageStrategy.execute()
+    console.log('页面加载完成:', results)
+    
+    // 如果有失败的任务，显示警告
+    if (results.failed.length > 0) {
+      ElMessage.warning(`部分数据加载失败: ${results.failed.join(', ')}`)
+    }
   } catch (error) {
-    console.error('加载配置失败:', error)
+    console.error('页面初始化失败:', error)
+    ElMessage.error('页面初始化失败，请刷新重试')
   }
+}
+
+// 生命周期钩子
+onMounted(() => {
+  // 使用优化的初始化函数
+  initializePage()
 })
 </script>
 
@@ -2411,6 +2547,65 @@ onMounted(async () => {
   .logs-container {
     background: var(--monitor-bg-secondary);
     border-color: var(--monitor-border-color);
+  }
+}
+
+// 新组件样式
+.config-viewer-section {
+  margin-top: 24px;
+}
+
+// 数据源配置标签页样式优化
+.el-tab-pane[name="datasource"] {
+  .el-card + .config-viewer-section {
+    margin-top: 24px;
+  }
+}
+
+// 配置名称字段样式
+.config-form {
+  .form-item-tip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    
+    .el-icon {
+      font-size: 14px;
+      color: var(--el-color-info);
+    }
+  }
+  
+  .el-input.is-error {
+    .el-input__wrapper {
+      border-color: var(--el-color-danger);
+      box-shadow: 0 0 0 1px var(--el-color-danger) inset;
+    }
+  }
+  
+  .el-form-item.is-error {
+    .form-item-tip {
+      color: var(--el-color-danger);
+      
+      .el-icon {
+        color: var(--el-color-danger);
+      }
+    }
+  }
+}
+
+// 响应式优化
+@media (max-width: 1200px) {
+  .config-viewer-section {
+    margin-top: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .config-viewer-section {
+    margin-top: 16px;
   }
 }
 </style>

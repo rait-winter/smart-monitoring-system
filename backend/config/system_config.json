@@ -1,7 +1,7 @@
 {
   "prometheus": {
     "enabled": true,
-    "url": "http://192.168.233.137:30090/",
+    "url": "http://192.168.233.137:30090",
     "timeout": 30000,
     "max_retries": 3,
     "scrape_interval": "15s",
@@ -10,7 +10,8 @@
     "scrapeInterval": "15s",
     "evaluationInterval": "15s",
     "username": null,
-    "password": null
+    "password": null,
+    "name": "complete-test"
   },
   "ai": {
     "enabled": true,

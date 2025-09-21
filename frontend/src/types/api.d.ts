@@ -39,10 +39,13 @@ export interface RequestConfig {
   timeout?: number
   retries?: number
   retryDelay?: number
-  cache?: boolean
+  useCache?: boolean
   cacheKey?: string
+  cacheDuration?: number
   skipErrorHandler?: boolean
   skipAuth?: boolean
+  requestStartTime?: number
+  __retryCount?: number
 }
 
 /**

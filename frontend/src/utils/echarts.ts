@@ -575,9 +575,20 @@ export function createResponsiveChart(
   // 设置配置
   chart.setOption(option)
   
-  // 响应式处理
+  // 响应式处理 - 添加防抖
+  let resizeTimer: NodeJS.Timeout | null = null
   const resizeHandler = () => {
-    chart.resize()
+    if (resizeTimer) {
+      clearTimeout(resizeTimer)
+    }
+    
+    resizeTimer = setTimeout(() => {
+      try {
+        chart.resize()
+      } catch (error) {
+        console.warn('ECharts resize失败:', error)
+      }
+    }, 100) // 100ms防抖
   }
   
   window.addEventListener('resize', resizeHandler)
@@ -595,6 +606,9 @@ export function createResponsiveChart(
   
   // 返回实例和清理函数
   const cleanup = () => {
+    if (resizeTimer) {
+      clearTimeout(resizeTimer)
+    }
     window.removeEventListener('resize', resizeHandler)
     mediaQuery.removeEventListener('change', themeHandler)
     chart.dispose()

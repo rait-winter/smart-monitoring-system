@@ -382,10 +382,32 @@ watch(
   }
 )
 
-// 自动调整大小
+// 自动调整大小 - 添加防抖和错误处理
 if (props.autoResize) {
-  useResizeObserver(chartRef, () => {
-    resizeChart()
+  let resizeTimer: NodeJS.Timeout | null = null
+  
+  const debouncedResize = () => {
+    if (resizeTimer) {
+      clearTimeout(resizeTimer)
+    }
+    
+    resizeTimer = setTimeout(() => {
+      try {
+        resizeChart()
+      } catch (error) {
+        console.warn('图表resize操作失败:', error)
+      }
+    }, 100) // 100ms防抖
+  }
+  
+  // 使用防抖的resize观察器
+  useResizeObserver(chartRef, debouncedResize)
+  
+  // 清理函数
+  onUnmounted(() => {
+    if (resizeTimer) {
+      clearTimeout(resizeTimer)
+    }
   })
 }
 

@@ -96,15 +96,33 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       open: false,
       cors: true,
+      // 启用HTTP/2
+      https: false,
+      // 优化热更新
+      hmr: {
+        overlay: false
+      },
       proxy: {
         '/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,
           secure: false,
-          timeout: 30000,
+          timeout: 15000, // 减少超时时间
+          // 启用连接池
+          agent: false,
           rewrite: (path) => {
             console.log('代理请求:', path)
             return path
+          },
+          configure: (proxy, options) => {
+            // 添加错误处理
+            proxy.on('error', (err, req, res) => {
+              console.error('代理错误:', err)
+            })
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              // 添加请求头优化
+              proxyReq.setHeader('Connection', 'keep-alive')
+            })
           }
         },
       },
