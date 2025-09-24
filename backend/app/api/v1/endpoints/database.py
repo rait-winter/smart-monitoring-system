@@ -54,8 +54,11 @@ async def set_current_database_config(config_id: int) -> APIResponse:
 async def get_database_config() -> APIResponse:
     """获取数据库配置"""
     try:
-        # 优先从数据库获取配置
-        db_config = await config_db_service.get_default_database_config()
+        # 优先从数据库获取配置，添加超时机制
+        db_config = await asyncio.wait_for(
+            config_db_service.get_default_database_config(), 
+            timeout=5.0  # 5秒超时
+        )
         if db_config:
             config = {
                 "name": db_config["name"],

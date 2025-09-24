@@ -26,7 +26,9 @@ from .endpoints import (
     system,
     prometheus,
     ollama,
-    database
+    database,
+    users,
+    logs
 )
 
 # 创建API v1路由器
@@ -83,6 +85,20 @@ api_router.include_router(
     tags=["数据库配置"]
 )
 
+# 注册用户管理路由
+api_router.include_router(
+    users.router,
+    prefix="/users",
+    tags=["用户管理"]
+)
+
+# 注册系统日志路由
+api_router.include_router(
+    logs.router,
+    prefix="/logs",
+    tags=["系统日志"]
+)
+
 # 根路径信息
 @api_router.get("/", tags=["API信息"])
 async def api_info():
@@ -99,7 +115,9 @@ async def api_info():
             "system - 系统管理",
             "prometheus - Prometheus配置管理",
             "ollama - Ollama AI配置管理",
-            "database - 数据库配置管理"
+            "database - 数据库配置管理",
+            "users - 用户管理",
+            "logs - 系统日志管理"
         ],
         "docs": "/docs",
         "openapi": "/openapi.json"

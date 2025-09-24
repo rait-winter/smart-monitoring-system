@@ -71,7 +71,7 @@ export function useConfigManager() {
   // Ollama配置
   const ollamaConfig = ref<OllamaConfig>({
     name: '',
-    enabled: false,
+    enabled: true, // 默认开启AI分析
     apiUrl: 'http://localhost:11434',
     model: 'llama3.2',
     timeout: 60000,
@@ -228,21 +228,52 @@ export function useConfigManager() {
   // 加载Ollama配置
   const loadOllamaConfig = async () => {
     try {
+      console.log('🔍 开始加载Ollama配置...')
       const response = await apiService.getOllamaConfig()
-      if (response && (response.data || response)) {
+      console.log('🔍 API响应:', response)
+      
+      if (response && response.success && (response.data || response)) {
         const config = response.data || response
+        console.log('🔍 解析配置数据:', config)
+        
+        // 如果有保存的配置，使用保存的配置
         ollamaConfig.value = {
           name: config.name || '',
-          enabled: config.enabled || false,
+          enabled: config.enabled !== undefined ? config.enabled : true, // 如果配置中没有enabled字段，默认为true
           apiUrl: config.apiUrl || 'http://localhost:11434',
           model: config.model || 'llama3.2',
           timeout: config.timeout || 60000,
           maxTokens: config.maxTokens || 2048,
           temperature: config.temperature || 0.7
         }
+        console.log('✅ 使用保存的Ollama配置:', ollamaConfig.value)
+      } else {
+        // 如果没有保存的配置，保持默认值但清空name字段
+        console.log('⚠️ 未找到保存的Ollama配置，使用默认值')
+        ollamaConfig.value = {
+          name: '', // 清空name，表示没有保存的配置
+          enabled: true, // 默认开启AI分析
+          apiUrl: 'http://localhost:11434',
+          model: 'llama3.2',
+          timeout: 60000,
+          maxTokens: 2048,
+          temperature: 0.7
+        }
+        console.log('✅ 使用默认Ollama配置:', ollamaConfig.value)
       }
     } catch (error) {
-      console.error('加载Ollama配置失败:', error)
+      console.error('❌ 加载Ollama配置失败:', error)
+      // 出错时也使用默认配置
+      ollamaConfig.value = {
+        name: '',
+        enabled: false,
+        apiUrl: 'http://localhost:11434',
+        model: 'llama3.2',
+        timeout: 60000,
+        maxTokens: 2048,
+        temperature: 0.7
+      }
+      console.log('⚠️ 使用默认Ollama配置(错误恢复):', ollamaConfig.value)
     }
   }
 

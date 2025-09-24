@@ -436,6 +436,10 @@ export class ApiService {
     return this.delete('/prometheus/config/history')
   }
 
+  async queryPrometheus(params: { query: string; config: any }) {
+    return this.post('/prometheus/query', params)
+  }
+
   // PromQL 查询相关
   async executePromQLQuery(queryParams: any) {
     return this.post('/prometheus/query', queryParams)
@@ -546,6 +550,38 @@ export class ApiService {
   async checkDatabaseHealth() {
     return this.get('/database/health')
   }
+
+  // 系统管理API
+  async getSystemHealth(useCache = false) {
+    return this.get('/system/health', { useCache })
+  }
+
+  async getServicesStatus(useCache = false) {
+    return this.get('/system/services', { useCache })
+  }
+
+  async restartService(serviceName: string) {
+    return this.post(`/system/services/${serviceName}/restart`)
+  }
+
+  async stopService(serviceName: string) {
+    return this.post(`/system/services/${serviceName}/stop`)
+  }
+
+  async startService(serviceName: string) {
+    return this.post(`/system/services/${serviceName}/start`)
+  }
+
+  async getSystemLogs(params: any = {}) {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', params.page.toString())
+    if (params.pageSize) queryParams.append('page_size', params.pageSize.toString())
+    if (params.level) queryParams.append('level', params.level)
+    if (params.service) queryParams.append('service', params.service)
+    
+    const url = `/system/logs${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+    return this.get(url, { useCache: false })
+  }
   
   // 指标数据
   async getMetrics(params?: any) {
@@ -598,11 +634,6 @@ export class ApiService {
   
   async getSystemServices() {
     return this.get('/system/services')
-  }
-
-  // 新增：获取系统健康状态
-  async getSystemHealth() {
-    return this.get('/system/health')
   }
 
   // 新增：获取系统统计信息
@@ -667,6 +698,55 @@ export class ApiService {
 
   async backupDatabase() {
     return this.post('/database/backup')
+  }
+
+  // 用户管理API
+  async getUsers() {
+    return this.get('/users')
+  }
+
+  async createUser(userData: any) {
+    return this.post('/users', userData)
+  }
+
+  async updateUser(userId: number, userData: any) {
+    return this.put(`/users/${userId}`, userData)
+  }
+
+  async deleteUser(userId: number) {
+    return this.delete(`/users/${userId}`)
+  }
+
+  async toggleUserStatus(userId: number) {
+    return this.post(`/users/${userId}/toggle-status`)
+  }
+
+  async resetUserPassword(userId: number) {
+    return this.post(`/users/${userId}/reset-password`)
+  }
+
+  // 系统日志API
+  async getSystemLogsApi(params: any = {}) {
+    const queryParams = new URLSearchParams()
+    if (params.page) queryParams.append('page', params.page)
+    if (params.page_size) queryParams.append('page_size', params.page_size)
+    if (params.level) queryParams.append('level', params.level)
+    if (params.user) queryParams.append('user', params.user)
+    if (params.search) queryParams.append('search', params.search)
+    
+    return this.get(`/logs?${queryParams.toString()}`)
+  }
+
+  async clearSystemLogsApi() {
+    return this.delete('/logs')
+  }
+
+  async refreshSystemLogsApi() {
+    return this.post('/logs/refresh')
+  }
+
+  async getLogStatistics() {
+    return this.get('/logs/stats')
   }
 }
 

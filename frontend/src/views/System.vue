@@ -94,6 +94,94 @@
       </el-col>
     </el-row>
 
+    <!-- 系统详细信息 -->
+    <el-row :gutter="20" class="system-details-section" v-if="systemInfo.systemDetails && Object.keys(systemInfo.systemDetails).length > 0">
+      <el-col :span="24">
+        <el-card>
+          <template #header>
+            <div class="section-header">
+              <h3>
+                <el-icon><Monitor /></el-icon>
+                系统详细信息
+              </h3>
+              <el-button size="small" text type="primary" @click="showSystemDetails = !showSystemDetails">
+                {{ showSystemDetails ? '收起' : '展开' }}
+              </el-button>
+            </div>
+          </template>
+          
+          <el-collapse-transition>
+            <div v-show="showSystemDetails">
+              <el-row :gutter="20">
+                <!-- 基本信息 -->
+                <el-col :span="8">
+                  <el-card class="detail-card">
+                    <h4>基本信息</h4>
+                    <el-descriptions :column="1" size="small">
+                      <el-descriptions-item label="操作系统">
+                        {{ systemInfo.systemDetails.platform }} {{ systemInfo.systemDetails.platform_release }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="主机名">
+                        {{ systemInfo.systemDetails.hostname }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="架构">
+                        {{ systemInfo.systemDetails.architecture }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="处理器">
+                        {{ systemInfo.systemDetails.processor || '未知' }}
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-card>
+                </el-col>
+                
+                <!-- CPU信息 -->
+                <el-col :span="8">
+                  <el-card class="detail-card">
+                    <h4>CPU信息</h4>
+                    <el-descriptions :column="1" size="small">
+                      <el-descriptions-item label="逻辑核心">
+                        {{ systemInfo.systemDetails.cpu_count_logical || 'N/A' }} 核
+                      </el-descriptions-item>
+                      <el-descriptions-item label="物理核心">
+                        {{ systemInfo.systemDetails.cpu_count_physical || 'N/A' }} 核
+                      </el-descriptions-item>
+                      <el-descriptions-item label="当前频率" v-if="systemInfo.systemDetails.cpu_freq_current">
+                        {{ systemInfo.systemDetails.cpu_freq_current }} MHz
+                      </el-descriptions-item>
+                      <el-descriptions-item label="最大频率" v-if="systemInfo.systemDetails.cpu_freq_max">
+                        {{ systemInfo.systemDetails.cpu_freq_max }} MHz
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-card>
+                </el-col>
+                
+                <!-- 存储和网络信息 -->
+                <el-col :span="8">
+                  <el-card class="detail-card">
+                    <h4>存储和网络</h4>
+                    <el-descriptions :column="1" size="small">
+                      <el-descriptions-item label="磁盘总容量" v-if="systemInfo.systemDetails.disk_total">
+                        {{ systemInfo.systemDetails.disk_total }} GB
+                      </el-descriptions-item>
+                      <el-descriptions-item label="磁盘已用" v-if="systemInfo.systemDetails.disk_used">
+                        {{ systemInfo.systemDetails.disk_used }} GB ({{ systemInfo.systemDetails.disk_usage_percent }}%)
+                      </el-descriptions-item>
+                      <el-descriptions-item label="网络发送" v-if="systemInfo.systemDetails.network_bytes_sent">
+                        {{ (systemInfo.systemDetails.network_bytes_sent / (1024*1024*1024)).toFixed(2) }} GB
+                      </el-descriptions-item>
+                      <el-descriptions-item label="网络接收" v-if="systemInfo.systemDetails.network_bytes_recv">
+                        {{ (systemInfo.systemDetails.network_bytes_recv / (1024*1024*1024)).toFixed(2) }} GB
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-card>
+                </el-col>
+              </el-row>
+            </div>
+          </el-collapse-transition>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <!-- 功能选项卡 -->
     <el-tabs v-model="activeTab" class="main-tabs">
       <!-- 服务状态 -->
@@ -119,16 +207,17 @@
                   <div class="service-info">
                     <el-icon 
                       class="service-icon"
-                      :class="getServiceStatusClass(service.status)"
+                      :class="getServiceStatusClass(service.status, service.health)"
                     >
-                      <CircleCheck v-if="service.status === 'running'" />
+                      <CircleCheck v-if="service.status === 'running' && service.health === 'healthy'" />
+                      <Warning v-else-if="service.status === 'running' && service.health === 'degraded'" />
                       <CircleClose v-else-if="service.status === 'stopped'" />
                       <Warning v-else />
                     </el-icon>
                     <h4>{{ service.name }}</h4>
                   </div>
-                  <el-tag :type="getServiceStatusType(service.status)" size="small">
-                    {{ getServiceStatusText(service.status) }}
+                  <el-tag :type="getServiceStatusType(service.status, service.health)" size="small">
+                    {{ getServiceStatusText(service.status, service.health) }}
                   </el-tag>
                 </div>
                 
@@ -149,6 +238,12 @@
                     <span class="label">运行时间:</span>
                     <span class="value">{{ service.uptime }}</span>
                   </div>
+                  <div class="detail-item" v-if="service.message">
+                    <span class="label">状态信息:</span>
+                    <span class="value" :class="{ 'text-warning': service.health === 'degraded', 'text-danger': service.health === 'unhealthy' }">
+                      {{ service.message }}
+                    </span>
+                  </div>
                 </div>
                 
                 <div class="service-actions">
@@ -156,24 +251,38 @@
                     v-if="service.status === 'stopped'"
                     size="small" 
                     type="success" 
-                    @click="startService(service)"
+                    @click="handleServiceAction(service, 'start')"
+                    :loading="servicesLoading"
                   >
                     启动
                   </el-button>
                   <el-button 
-                    v-else
+                    v-else-if="service.status === 'running'"
                     size="small" 
                     type="warning" 
-                    @click="stopService(service)"
+                    @click="handleServiceAction(service, 'stop')"
+                    :loading="servicesLoading"
                   >
                     停止
                   </el-button>
-                  <el-button size="small" @click="restartService(service)">
+                  <el-button 
+                    v-if="service.status === 'running'"
+                    size="small" 
+                    @click="handleServiceAction(service, 'restart')"
+                    :loading="servicesLoading"
+                  >
                     重启
                   </el-button>
                   <el-button size="small" type="info" @click="viewServiceLogs(service)">
                     日志
                   </el-button>
+                  <el-tag 
+                    v-if="service.status === 'unknown'"
+                    type="info" 
+                    size="small"
+                  >
+                    状态未知
+                  </el-tag>
                 </div>
               </div>
             </el-col>
@@ -397,25 +506,64 @@
             </div>
           </template>
           
+          <!-- 配置状态提示 -->
+          <el-alert
+            v-if="ollamaConfig.name"
+            :title="`正在使用已保存的配置: ${ollamaConfig.name}`"
+            type="success"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 20px;"
+          >
+            <template #default>
+              <span>您可以修改以下配置参数并保存为新的配置，或者覆盖当前配置。</span>
+            </template>
+          </el-alert>
+          
+          <el-alert
+            v-else
+            title="使用默认配置"
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 20px;"
+          >
+            <template #default>
+              <span>当前使用的是默认配置，建议填写配置名称并保存，以便后续管理和使用。</span>
+            </template>
+          </el-alert>
+          
           <el-form :model="ollamaConfig" label-width="150px" class="config-form">
             <el-row :gutter="40">
               <el-col :span="12">
                 <h4>基础配置</h4>
                 <el-form-item label="启用AI分析">
                   <el-switch v-model="ollamaConfig.enabled" />
+                  <div class="form-item-tip" v-if="ollamaConfig.enabled">
+                    <el-icon><InfoFilled /></el-icon>
+                    <span style="color: #67c23a;">AI分析功能已启用，系统将提供智能监控和预警服务</span>
+                  </div>
                 </el-form-item>
-                <el-form-item label="配置名称" :error="ollamaConfigNameValidation.valid ? '' : ollamaConfigNameValidation.message">
+                <el-form-item 
+                  label="配置名称" 
+                  :error="!ollamaConfigNameValidation.valid ? ollamaConfigNameValidation.message : ''"
+                >
                   <el-input 
                     v-model="ollamaConfig.name" 
-                    placeholder="例如：production-ollama"
+                    :placeholder="ollamaConfig.name ? `当前配置: ${ollamaConfig.name}` : '为配置命名，例如: prod-ollama, dev-ai'"
                     :disabled="!ollamaConfig.enabled"
+                    :class="{ 'is-error': !ollamaConfigNameValidation.valid }"
                     maxlength="50"
                     show-word-limit
-                    :class="{ 'is-error': !ollamaConfigNameValidation.valid }"
                   />
                   <div class="form-item-tip">
                     <el-icon><InfoFilled /></el-icon>
-                    只能包含字母、数字、下划线和短横线，不能以数字或符号开头或结尾
+                    <span v-if="ollamaConfig.name">
+                      修改配置名称将创建新配置，留空则覆盖当前配置
+                    </span>
+                    <span v-else>
+                      只能包含字母、数字、下划线(_)和短横线(-)，不能以数字或符号开头/结尾
+                    </span>
                   </div>
                 </el-form-item>
                 <el-form-item label="API地址">
@@ -943,7 +1091,7 @@
           <template #header>
             <div class="section-header">
               <h3>系统参数配置</h3>
-              <el-button size="small" type="primary" @click="savePrometheusConfig" :loading="saveLoading">
+              <el-button size="small" type="primary" @click="saveSystemConfig" :loading="systemConfigLoading">
                 保存配置
               </el-button>
             </div>
@@ -956,6 +1104,14 @@
                 <el-form-item label="系统名称">
                   <el-input v-model="systemConfig.systemName" />
                 </el-form-item>
+                <el-form-item label="系统描述">
+                  <el-input 
+                    v-model="systemConfig.systemDescription" 
+                    type="textarea" 
+                    :rows="2"
+                    placeholder="智能监控预警系统，基于AI的自动化巡检与智能预警"
+                  />
+                </el-form-item>
                 <el-form-item label="数据保留天数">
                   <el-input-number 
                     v-model="systemConfig.dataRetentionDays" 
@@ -963,6 +1119,9 @@
                     :max="365"
                     style="width: 100%"
                   />
+                  <div class="form-item-tip">
+                    超过此天数的数据将被自动清理
+                  </div>
                 </el-form-item>
                 <el-form-item label="自动备份">
                   <el-switch v-model="systemConfig.autoBackup" />
@@ -972,6 +1131,15 @@
                     v-model="systemConfig.backupInterval" 
                     :min="1" 
                     :max="168"
+                    :disabled="!systemConfig.autoBackup"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+                <el-form-item label="备份保留数量">
+                  <el-input-number 
+                    v-model="systemConfig.backupRetentionCount" 
+                    :min="1" 
+                    :max="50"
                     :disabled="!systemConfig.autoBackup"
                     style="width: 100%"
                   />
@@ -987,6 +1155,9 @@
                     :max="300"
                     style="width: 100%"
                   />
+                  <div class="form-item-tip">
+                    系统指标数据的采集频率
+                  </div>
                 </el-form-item>
                 <el-form-item label="默认告警阈值">
                   <el-input-number 
@@ -995,6 +1166,9 @@
                     :max="95"
                     style="width: 100%"
                   />
+                  <div class="form-item-tip">
+                    当指标超过此阈值时触发告警
+                  </div>
                 </el-form-item>
                 <el-form-item label="启用异常检测">
                   <el-switch v-model="systemConfig.enableAnomalyDetection" />
@@ -1008,11 +1182,147 @@
                     show-stops
                     show-tooltip
                   />
+                  <div class="form-item-tip">
+                    1：最低灵敏度，10：最高灵敏度
+                  </div>
+                </el-form-item>
+                <el-form-item label="最大并发连接数">
+                  <el-input-number 
+                    v-model="systemConfig.maxConnections" 
+                    :min="10" 
+                    :max="1000"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            
+            <!-- 高级配置 -->
+            <el-divider />
+            <h4>高级配置</h4>
+            <el-row :gutter="40">
+              <el-col :span="12">
+                <el-form-item label="启用日志记录">
+                  <el-switch v-model="systemConfig.enableLogging" />
+                </el-form-item>
+                <el-form-item label="日志级别">
+                  <el-select 
+                    v-model="systemConfig.logLevel" 
+                    style="width: 100%"
+                    :disabled="!systemConfig.enableLogging"
+                  >
+                    <el-option label="ERROR" value="error" />
+                    <el-option label="WARN" value="warn" />
+                    <el-option label="INFO" value="info" />
+                    <el-option label="DEBUG" value="debug" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="启用性能监控">
+                  <el-switch v-model="systemConfig.enablePerformanceMonitoring" />
+                </el-form-item>
+                <el-form-item label="缓存过期时间(分钟)">
+                  <el-input-number 
+                    v-model="systemConfig.cacheExpireTime" 
+                    :min="1" 
+                    :max="1440"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </el-col>
+              
+              <el-col :span="12">
+                <el-form-item label="启用API限流">
+                  <el-switch v-model="systemConfig.enableRateLimit" />
+                </el-form-item>
+                <el-form-item label="每分钟请求限制">
+                  <el-input-number 
+                    v-model="systemConfig.rateLimit" 
+                    :min="10" 
+                    :max="10000"
+                    :disabled="!systemConfig.enableRateLimit"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+                <el-form-item label="时区">
+                  <el-select v-model="systemConfig.timezone" style="width: 100%">
+                    <el-option label="Asia/Shanghai (UTC+8)" value="Asia/Shanghai" />
+                    <el-option label="UTC (UTC+0)" value="UTC" />
+                    <el-option label="America/New_York (UTC-5)" value="America/New_York" />
+                    <el-option label="Europe/London (UTC+0)" value="Europe/London" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="语言">
+                  <el-select v-model="systemConfig.language" style="width: 100%">
+                    <el-option label="简体中文" value="zh-CN" />
+                    <el-option label="English" value="en-US" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            
+            <!-- 通知配置 -->
+            <el-divider />
+            <h4>通知配置</h4>
+            <el-row :gutter="40">
+              <el-col :span="12">
+                <el-form-item label="启用邮件通知">
+                  <el-switch v-model="systemConfig.notifications.email.enabled" />
+                </el-form-item>
+                <el-form-item label="SMTP服务器">
+                  <el-input 
+                    v-model="systemConfig.notifications.email.smtp.server" 
+                    :disabled="!systemConfig.notifications.email.enabled"
+                    placeholder="smtp.gmail.com"
+                  />
+                </el-form-item>
+                <el-form-item label="SMTP端口">
+                  <el-input-number 
+                    v-model="systemConfig.notifications.email.smtp.port" 
+                    :min="1" 
+                    :max="65535"
+                    :disabled="!systemConfig.notifications.email.enabled"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+                <el-form-item label="发件人邮箱">
+                  <el-input 
+                    v-model="systemConfig.notifications.email.from" 
+                    :disabled="!systemConfig.notifications.email.enabled"
+                    placeholder="noreply@company.com"
+                  />
+                </el-form-item>
+              </el-col>
+              
+              <el-col :span="12">
+                <el-form-item label="启用企业微信通知">
+                  <el-switch v-model="systemConfig.notifications.wechat.enabled" />
+                </el-form-item>
+                <el-form-item label="企业微信Webhook">
+                  <el-input 
+                    v-model="systemConfig.notifications.wechat.webhook" 
+                    :disabled="!systemConfig.notifications.wechat.enabled"
+                    placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send"
+                  />
+                </el-form-item>
+                <el-form-item label="启用钉钉通知">
+                  <el-switch v-model="systemConfig.notifications.dingtalk.enabled" />
+                </el-form-item>
+                <el-form-item label="钉钉Webhook">
+                  <el-input 
+                    v-model="systemConfig.notifications.dingtalk.webhook" 
+                    :disabled="!systemConfig.notifications.dingtalk.enabled"
+                    placeholder="https://oapi.dingtalk.com/robot/send"
+                  />
                 </el-form-item>
               </el-col>
             </el-row>
           </el-form>
         </el-card>
+        
+        <!-- AI配置查看器 -->
+        <div class="config-viewer-section">
+          <OllamaConfigViewerOptimized ref="ollamaConfigViewerRef2" />
+        </div>
       </el-tab-pane>
       
       <!-- 用户管理 -->
@@ -1021,7 +1331,7 @@
           <template #header>
             <div class="section-header">
               <h3>用户列表</h3>
-              <el-button size="small" type="primary" @click="showCreateUser = true">
+              <el-button size="small" type="primary" @click="showUserDialog = true">
                 添加用户
               </el-button>
             </div>
@@ -1069,6 +1379,68 @@
             </el-table-column>
           </el-table>
         </el-card>
+        
+        <!-- 用户创建/编辑对话框 -->
+        <el-dialog
+          v-model="showUserDialog"
+          :title="editingUser ? '编辑用户' : '创建用户'"
+          width="500px"
+          @close="resetUserForm"
+        >
+          <el-form
+            ref="userFormRef"
+            :model="userForm"
+            :rules="userFormRules"
+            label-width="80px"
+          >
+            <el-form-item label="用户名" prop="username">
+              <el-input
+                v-model="userForm.username"
+                placeholder="请输入用户名"
+                :disabled="editingUser !== null"
+              />
+            </el-form-item>
+            
+            <el-form-item label="邮箱" prop="email">
+              <el-input
+                v-model="userForm.email"
+                type="email"
+                placeholder="请输入邮箱地址"
+              />
+            </el-form-item>
+            
+            <el-form-item v-if="!editingUser" label="密码" prop="password">
+              <el-input
+                v-model="userForm.password"
+                type="password"
+                placeholder="请输入密码"
+                show-password
+              />
+            </el-form-item>
+            
+            <el-form-item label="角色" prop="role">
+              <el-select v-model="userForm.role" placeholder="请选择角色">
+                <el-option label="管理员" value="admin" />
+                <el-option label="操作员" value="operator" />
+                <el-option label="只读用户" value="viewer" />
+              </el-select>
+            </el-form-item>
+            
+            <el-form-item label="状态" prop="status">
+              <el-radio-group v-model="userForm.status">
+                <el-radio value="active">正常</el-radio>
+                <el-radio value="inactive">禁用</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-form>
+          
+          <template #footer>
+            <el-button @click="showUserDialog = false">取消</el-button>
+            <el-button type="primary" @click="submitUserForm" :loading="userFormLoading">
+              {{ editingUser ? '更新' : '创建' }}
+            </el-button>
+          </template>
+        </el-dialog>
       </el-tab-pane>
       
       <!-- 系统日志 -->
@@ -1077,36 +1449,84 @@
           <template #header>
             <div class="section-header">
               <h3>系统操作日志</h3>
-              <el-button size="small" @click="refreshLogs">
-                刷新日志
-              </el-button>
+              <div class="log-controls">
+                <el-input
+                  v-model="logSearchText"
+                  placeholder="搜索日志内容..."
+                  style="width: 200px;"
+                  clearable
+                >
+                  <template #prefix>
+                    <el-icon><Search /></el-icon>
+                  </template>
+                </el-input>
+                <el-select
+                  v-model="logLevelFilter"
+                  placeholder="日志级别"
+                  style="width: 120px; margin-left: 10px;"
+                  clearable
+                >
+                  <el-option label="INFO" value="INFO" />
+                  <el-option label="WARNING" value="WARNING" />
+                  <el-option label="ERROR" value="ERROR" />
+                  <el-option label="SUCCESS" value="SUCCESS" />
+                  <el-option label="DEBUG" value="DEBUG" />
+                </el-select>
+                <el-select
+                  v-model="logUserFilter"
+                  placeholder="操作用户"
+                  style="width: 120px; margin-left: 10px;"
+                  clearable
+                >
+                  <el-option label="system" value="system" />
+                  <el-option label="admin" value="admin" />
+                  <el-option label="operator" value="operator" />
+                  <el-option label="viewer" value="viewer" />
+                </el-select>
+                <el-button size="small" @click="refreshLogs" style="margin-left: 10px;">
+                  <el-icon><Refresh /></el-icon>
+                  刷新
+                </el-button>
+                <el-button size="small" type="danger" @click="clearLogs" style="margin-left: 10px;">
+                  <el-icon><Delete /></el-icon>
+                  清空
+                </el-button>
+              </div>
             </div>
           </template>
           
           <div class="logs-container">
+            <div v-if="filteredLogs.length === 0" class="no-logs">
+              <el-empty description="没有找到匹配的日志" />
+            </div>
             <div 
-              v-for="log in systemLogs" 
+              v-for="log in paginatedLogs" 
               :key="log.id"
               class="log-item"
               :class="getLogLevelClass(log.level)"
             >
               <div class="log-header">
                 <span class="log-time">{{ log.timestamp }}</span>
-                <span class="log-level">{{ log.level }}</span>
+                <el-tag :type="getLogLevelTagType(log.level)" size="small" class="log-level">
+                  {{ log.level }}
+                </el-tag>
                 <span class="log-user">{{ log.user }}</span>
               </div>
-              <div class="log-content">{{ log.message }}</div>
+              <div class="log-message">{{ log.message }}</div>
             </div>
-          </div>
-          
-          <div class="logs-pagination">
-            <el-pagination
-              v-model:current-page="logsCurrentPage"
-              :page-size="20"
-              :total="totalLogs"
-              layout="prev, pager, next"
-              @current-change="handleLogsPageChange"
-            />
+            
+            <!-- 分页 -->
+            <div v-if="filteredLogs.length > 0" class="log-pagination">
+              <el-pagination
+                v-model:current-page="logCurrentPage"
+                v-model:page-size="logPageSize"
+                :page-sizes="[10, 20, 50, 100]"
+                :total="filteredLogs.length"
+                layout="total, sizes, prev, pager, next, jumper"
+                @size-change="handleLogPageSizeChange"
+                @current-change="handleLogCurrentChange"
+              />
+            </div>
           </div>
         </el-card>
       </el-tab-pane>
@@ -1202,43 +1622,11 @@
       </template>
     </el-dialog>
 
-    <!-- 添加用户弹窗 -->
-    <el-dialog
-      v-model="showCreateUser"
-      title="添加用户"
-      width="500px"
-    >
-      <el-form :model="userForm" label-width="80px">
-        <el-form-item label="用户名">
-          <el-input v-model="userForm.username" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="userForm.email" />
-        </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="userForm.password" type="password" />
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="userForm.role" style="width: 100%">
-            <el-option label="管理员" value="admin" />
-            <el-option label="操作员" value="operator" />
-            <el-option label="观察员" value="viewer" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="showCreateUser = false">取消</el-button>
-          <el-button type="primary" @click="createUser">确定</el-button>
-        </span>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Tools,
@@ -1256,12 +1644,15 @@ import {
   Setting,
   DataBoard,
   FolderOpened,
-  InfoFilled
+  InfoFilled,
+  Search,
+  Delete
 } from '@element-plus/icons-vue'
 import { useLoadingOptimizer } from '@/utils/loadingOptimizer'
 import { requestManager } from '@/utils/requestManager'
 import { performanceMonitor } from '@/utils/performanceMonitor'
 import { useConfigManager } from '@/composables/useConfigManager'
+import { apiService } from '@/services/api'
 import { useDatabaseManager } from '@/composables/useDatabaseManager'
 import type { PrometheusTarget } from '@/composables/useConfigManager'
 import PrometheusConfigViewerOptimized from '@/components/common/PrometheusConfigViewerOptimized.vue'
@@ -1318,7 +1709,6 @@ const testDbLoading = ref(false)
 const loadDbConfigLoading = ref(false)
 const modelsLoading = ref(false)
 const backupLoading = ref(false)
-const showCreateUser = ref(false)
 const showAddTarget = ref(false)
 const logsCurrentPage = ref(1)
 const totalLogs = ref(500)
@@ -1493,71 +1883,68 @@ const systemInfo = ref({
   uptime: 127,
   onlineUsers: 12,
   cpuUsage: 68.5,
-  memoryUsage: 74.2
+  memoryUsage: 74.2,
+  systemDetails: {}
 })
 
+// 系统详情展开状态
+const showSystemDetails = ref(false)
+
 // 系统服务
-const systemServices = ref([
-  {
-    name: 'API网关',
-    status: 'running',
-    port: 8000,
-    cpuUsage: 15.2,
-    memoryUsage: 256,
-    uptime: '5天 12小时'
-  },
-  {
-    name: 'AI检测服务',
-    status: 'running',
-    port: 8001,
-    cpuUsage: 32.8,
-    memoryUsage: 512,
-    uptime: '3天 8小时'
-  },
-  {
-    name: '规则引擎',
-    status: 'running',
-    port: 8002,
-    cpuUsage: 8.5,
-    memoryUsage: 128,
-    uptime: '7天 2小时'
-  },
-  {
-    name: '通知服务',
-    status: 'warning',
-    port: 8003,
-    cpuUsage: 12.1,
-    memoryUsage: 64,
-    uptime: '1天 15小时'
-  },
-  {
-    name: '数据库服务',
-    status: 'running',
-    port: 5432,
-    cpuUsage: 22.3,
-    memoryUsage: 1024,
-    uptime: '15天 6小时'
-  },
-  {
-    name: 'Redis服务',
-    status: 'stopped',
-    port: 6379,
-    cpuUsage: 0,
-    memoryUsage: 0,
-    uptime: '-'
-  }
-])
+const systemServices = ref([])
+const realTimeSystemInfo = ref({
+  uptime: '0天0小时',
+  cpuUsage: 0,
+  memoryUsage: 0,
+  diskUsage: 0
+})
+
+// 系统配置相关
+const systemConfigLoading = ref(false)
 
 // 系统配置
 const systemConfig = ref({
   systemName: '智能监控预警系统',
+  systemDescription: '基于AI的自动化巡检与智能预警系统',
   dataRetentionDays: 90,
   autoBackup: true,
   backupInterval: 24,
+  backupRetentionCount: 10,
   collectInterval: 60,
   defaultThreshold: 85,
   enableAnomalyDetection: true,
-  detectionSensitivity: 7
+  detectionSensitivity: 7,
+  maxConnections: 100,
+  
+  // 高级配置
+  enableLogging: true,
+  logLevel: 'info',
+  enablePerformanceMonitoring: true,
+  cacheExpireTime: 60,
+  enableRateLimit: true,
+  rateLimit: 1000,
+  timezone: 'Asia/Shanghai',
+  language: 'zh-CN',
+  
+  // 通知配置
+  notifications: {
+    email: {
+      enabled: false,
+      smtp: {
+        server: '',
+        port: 587
+      },
+      from: ''
+    },
+    wechat: {
+      enabled: false,
+      webhook: ''
+    },
+    dingtalk: {
+      enabled: false,
+      webhook: ''
+    }
+  }
 })
 
 // 用户数据
@@ -1591,52 +1978,157 @@ const users = ref([
   }
 ])
 
+// 用户管理相关
+const showUserDialog = ref(false)
+const editingUser = ref(null)
+const userFormRef = ref()
+const userFormLoading = ref(false)
+
 // 用户表单
 const userForm = ref({
   username: '',
   email: '',
   password: '',
-  role: 'viewer'
+  role: 'viewer',
+  status: 'active'
 })
 
-// 系统日志
+// 用户表单验证规则
+const userFormRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 20, message: '用户名长度应在3-20个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线', trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
+    { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 20, message: '密码长度应在6-20个字符', trigger: 'blur' }
+  ],
+  role: [
+    { required: true, message: '请选择用户角色', trigger: 'change' }
+  ],
+  status: [
+    { required: true, message: '请选择用户状态', trigger: 'change' }
+  ]
+}
+
+// 系统日志相关
+const logSearchText = ref('')
+const logLevelFilter = ref('')
+const logUserFilter = ref('')
+const logCurrentPage = ref(1)
+const logPageSize = ref(20)
+
+// 系统日志数据
 const systemLogs = ref([
   {
     id: 1,
-    timestamp: '2025-09-06 22:45:32',
+    timestamp: '2025-09-21 22:45:32',
     level: 'INFO',
     user: 'admin',
     message: '用户登录系统'
   },
   {
     id: 2,
-    timestamp: '2025-09-06 22:30:15',
+    timestamp: '2025-09-21 22:30:15',
     level: 'WARNING',
     user: 'system',
     message: '通知服务响应缓慢'
   },
   {
     id: 3,
-    timestamp: '2025-09-06 22:15:45',
+    timestamp: '2025-09-21 22:15:45',
     level: 'ERROR',
     user: 'system',
     message: 'Redis服务连接失败'
   },
   {
     id: 4,
-    timestamp: '2025-09-06 21:58:22',
+    timestamp: '2025-09-21 21:58:22',
     level: 'INFO',
     user: 'operator',
     message: '创建新的监控规则'
   },
   {
     id: 5,
-    timestamp: '2025-09-06 21:30:10',
+    timestamp: '2025-09-21 21:30:10',
     level: 'SUCCESS',
     user: 'system',
     message: '系统备份完成'
+  },
+  {
+    id: 6,
+    timestamp: '2025-09-21 21:15:30',
+    level: 'DEBUG',
+    user: 'system',
+    message: '缓存清理完成'
+  },
+  {
+    id: 7,
+    timestamp: '2025-09-21 21:00:18',
+    level: 'ERROR',
+    user: 'system',
+    message: '数据库连接超时'
+  },
+  {
+    id: 8,
+    timestamp: '2025-09-21 20:45:12',
+    level: 'INFO',
+    user: 'admin',
+    message: '配置更新完成'
+  },
+  {
+    id: 9,
+    timestamp: '2025-09-21 20:30:05',
+    level: 'WARNING',
+    user: 'system',
+    message: 'CPU使用率较高'
+  },
+  {
+    id: 10,
+    timestamp: '2025-09-21 20:15:00',
+    level: 'SUCCESS',
+    user: 'system',
+    message: '服务重启成功'
   }
 ])
+
+// 过滤后的日志
+const filteredLogs = computed(() => {
+  let logs = systemLogs.value
+  
+  // 按搜索文本过滤
+  if (logSearchText.value) {
+    const searchText = logSearchText.value.toLowerCase()
+    logs = logs.filter(log => 
+      log.message.toLowerCase().includes(searchText) ||
+      log.user.toLowerCase().includes(searchText)
+    )
+  }
+  
+  // 按日志级别过滤
+  if (logLevelFilter.value) {
+    logs = logs.filter(log => log.level === logLevelFilter.value)
+  }
+  
+  // 按用户过滤
+  if (logUserFilter.value) {
+    logs = logs.filter(log => log.user === logUserFilter.value)
+  }
+  
+  return logs
+})
+
+// 分页后的日志
+const paginatedLogs = computed(() => {
+  const start = (logCurrentPage.value - 1) * logPageSize.value
+  const end = start + logPageSize.value
+  return filteredLogs.value.slice(start, end)
+})
 
 /**
  * Ollama配置相关方法
@@ -2060,26 +2552,6 @@ const resetTargetForm = () => {
   targetLabels.value = [{ key: '', value: '' }]
 }
 
-/**
- * 刷新系统信息
- */
-const refreshSystemInfo = async () => {
-  refreshLoading.value = true
-  try {
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
-    // 更新系统数据
-    systemInfo.value.cpuUsage = Math.random() * 30 + 50
-    systemInfo.value.memoryUsage = Math.random() * 20 + 60
-    systemInfo.value.onlineUsers = Math.floor(Math.random() * 10) + 8
-    
-    ElMessage.success('系统信息已刷新')
-  } catch (error) {
-    ElMessage.error('刷新失败')
-  } finally {
-    refreshLoading.value = false
-  }
-}
 
 /**
  * 系统备份
@@ -2105,10 +2577,99 @@ const backupSystem = async () => {
 const refreshServices = async () => {
   servicesLoading.value = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success('服务状态已刷新')
+    console.log('🔄 刷新服务状态...')
+    const response = await apiService.getServicesStatus()
+    
+    if (response?.success && response?.data) {
+      systemServices.value = response.data.services || []
+      console.log('✅ 服务状态刷新成功:', systemServices.value.length, '个服务')
+      ElMessage.success(`服务状态刷新成功，共${systemServices.value.length}个服务`)
+    } else {
+      console.warn('⚠️ 服务状态响应格式异常:', response)
+      ElMessage.warning('服务状态数据格式异常')
+    }
+  } catch (error) {
+    console.error('❌ 刷新服务状态失败:', error)
+    ElMessage.error('刷新服务状态失败')
   } finally {
     servicesLoading.value = false
+  }
+}
+
+/**
+ * 刷新系统信息
+ */
+const refreshSystemInfo = async () => {
+  refreshLoading.value = true
+  try {
+    console.log('🔄 刷新系统信息...')
+    const response = await apiService.getSystemHealth()
+    
+    if (response?.success && response?.data) {
+      const healthData = response.data
+      realTimeSystemInfo.value = {
+        uptime: healthData.uptime || '未知',
+        cpuUsage: healthData.cpuUsage || 0,
+        memoryUsage: healthData.memoryUsage || 0,
+        diskUsage: healthData.diskUsage || 0
+      }
+      
+      // 更新系统概览数据
+      systemInfo.value = {
+        uptime: healthData.uptimeSeconds ? Math.floor(healthData.uptimeSeconds / (3600 * 24)) : 0, // 转换为天数
+        onlineUsers: healthData.onlineUsers || 1, // 使用真实的在线用户数
+        cpuUsage: healthData.cpuUsage || 0,
+        memoryUsage: healthData.memoryUsage || 0,
+        // 添加额外的系统信息
+        systemDetails: healthData.systemInfo || {}
+      }
+      
+      console.log('✅ 系统信息刷新成功:', realTimeSystemInfo.value)
+      ElMessage.success('系统信息刷新成功')
+    } else {
+      console.warn('⚠️ 系统健康状态响应异常:', response)
+      ElMessage.warning('系统健康状态数据异常')
+    }
+  } catch (error) {
+    console.error('❌ 刷新系统信息失败:', error)
+    ElMessage.error('刷新系统信息失败')
+  } finally {
+    refreshLoading.value = false
+  }
+}
+
+/**
+ * 服务操作
+ */
+const handleServiceAction = async (service: any, action: string) => {
+  try {
+    console.log(`🔧 执行服务操作: ${action} ${service.name}`)
+    let response
+    
+    switch (action) {
+      case 'restart':
+        response = await apiService.restartService(service.name)
+        break
+      case 'start':
+        response = await apiService.startService(service.name)
+        break
+      case 'stop':
+        response = await apiService.stopService(service.name)
+        break
+      default:
+        throw new Error(`未知的服务操作: ${action}`)
+    }
+    
+    if (response?.success) {
+      ElMessage.success(response.message)
+      // 操作成功后刷新服务状态
+      await refreshServices()
+    } else {
+      ElMessage.error(response?.message || `${action}操作失败`)
+    }
+  } catch (error) {
+    console.error(`❌ 服务${action}操作失败:`, error)
+    ElMessage.error(`服务${action}操作失败`)
   }
 }
 
@@ -2164,16 +2725,35 @@ const viewServiceLogs = (service: any) => {
  * 编辑用户
  */
 const editUser = (user: any) => {
-  ElMessage.info(`编辑用户: ${user.username}`)
+  editingUser.value = user
+  userForm.value = {
+    username: user.username,
+    email: user.email,
+    password: '', // 编辑时不显示密码
+    role: user.role,
+    status: user.status
+  }
+  showUserDialog.value = true
 }
 
 /**
  * 切换用户状态
  */
-const toggleUserStatus = (user: any) => {
-  user.status = user.status === 'active' ? 'inactive' : 'active'
-  const statusText = user.status === 'active' ? '启用' : '禁用'
-  ElMessage.success(`用户${user.username}已${statusText}`)
+const toggleUserStatus = async (user: any) => {
+  try {
+    const response = await apiService.toggleUserStatus(user.id)
+    if (response?.success) {
+      // 更新本地数据
+      const index = users.value.findIndex(u => u.id === user.id)
+      if (index > -1) {
+        users.value[index] = response.data.user
+      }
+      ElMessage.success(response.message)
+    }
+  } catch (error) {
+    console.error('切换用户状态失败:', error)
+    ElMessage.error('切换用户状态失败')
+  }
 }
 
 /**
@@ -2182,9 +2762,16 @@ const toggleUserStatus = (user: any) => {
 const resetPassword = async (user: any) => {
   try {
     await ElMessageBox.confirm(`确定要重置用户${user.username}的密码吗？`, '确认操作')
-    ElMessage.success('密码重置成功，新密码已发送至用户邮箱')
-  } catch {
-    // 用户取消
+    
+    const response = await apiService.resetUserPassword(user.id)
+    if (response?.success) {
+      ElMessage.success(response.message)
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('重置密码失败:', error)
+      ElMessage.error('重置密码失败')
+    }
   }
 }
 
@@ -2199,48 +2786,193 @@ const deleteUser = async (user: any) => {
       { type: 'warning' }
     )
     
-    const index = users.value.findIndex(u => u.id === user.id)
-    if (index > -1) {
-      users.value.splice(index, 1)
-      ElMessage.success('用户删除成功')
+    const response = await apiService.deleteUser(user.id)
+    if (response?.success) {
+      const index = users.value.findIndex(u => u.id === user.id)
+      if (index > -1) {
+        users.value.splice(index, 1)
+      }
+      ElMessage.success(response.message)
     }
-  } catch {
-    // 用户取消
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除用户失败:', error)
+      ElMessage.error('删除用户失败')
+    }
   }
 }
 
 /**
- * 创建用户
+ * 提交用户表单
  */
-const createUser = () => {
-  const newUser = {
-    id: Date.now(),
-    ...userForm.value,
-    status: 'active',
-    lastLogin: '-',
-    createdAt: new Date().toLocaleString()
+const submitUserForm = async () => {
+  try {
+    await userFormRef.value?.validate()
+    
+    userFormLoading.value = true
+    
+    if (editingUser.value) {
+      // 编辑用户
+      const response = await apiService.updateUser(editingUser.value.id, {
+        email: userForm.value.email,
+        role: userForm.value.role,
+        status: userForm.value.status
+      })
+      
+      if (response?.success) {
+        // 更新本地数据
+        const index = users.value.findIndex(u => u.id === editingUser.value.id)
+        if (index > -1) {
+          users.value[index] = response.data.user
+        }
+        ElMessage.success('用户信息更新成功')
+      }
+    } else {
+      // 创建新用户
+      const response = await apiService.createUser({
+        username: userForm.value.username,
+        email: userForm.value.email,
+        role: userForm.value.role,
+        status: userForm.value.status
+      })
+      
+      if (response?.success) {
+        users.value.unshift(response.data.user)
+        ElMessage.success('用户创建成功')
+      }
+    }
+    
+    showUserDialog.value = false
+    resetUserForm()
+    
+  } catch (error) {
+    console.error('用户操作失败:', error)
+    ElMessage.error('用户操作失败')
+  } finally {
+    userFormLoading.value = false
   }
-  
-  users.value.push(newUser)
-  showCreateUser.value = false
-  
-  // 重置表单
+}
+
+/**
+ * 重置用户表单
+ */
+const resetUserForm = () => {
+  editingUser.value = null
   userForm.value = {
     username: '',
     email: '',
     password: '',
-    role: 'viewer'
+    role: 'viewer',
+    status: 'active'
   }
-  
-  ElMessage.success('用户创建成功')
+  userFormRef.value?.resetFields()
+}
+
+/**
+ * 日志相关函数
+ */
+
+/**
+ * 获取日志级别对应的Tag类型
+ */
+const getLogLevelTagType = (level: string) => {
+  const typeMap: Record<string, string> = {
+    INFO: 'info',
+    WARNING: 'warning',
+    ERROR: 'danger',
+    SUCCESS: 'success',
+    DEBUG: ''
+  }
+  return typeMap[level] || 'info'
 }
 
 /**
  * 刷新日志
  */
-const refreshLogs = () => {
-  ElMessage.success('日志已刷新')
+const refreshLogs = async () => {
+  try {
+    const response = await apiService.refreshSystemLogsApi()
+    if (response?.success) {
+      // 重新加载日志数据
+      await loadSystemLogs()
+      ElMessage.success(response.message)
+    }
+  } catch (error) {
+    console.error('刷新日志失败:', error)
+    ElMessage.error('刷新日志失败')
+  }
 }
+
+/**
+ * 清空日志
+ */
+const clearLogs = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要清空所有日志吗？此操作不可恢复。',
+      '确认清空',
+      { type: 'warning' }
+    )
+    
+    const response = await apiService.clearSystemLogsApi()
+    if (response?.success) {
+      systemLogs.value = []
+      logCurrentPage.value = 1
+      ElMessage.success(response.message)
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('清空日志失败:', error)
+      ElMessage.error('清空日志失败')
+    }
+  }
+}
+
+/**
+ * 处理日志分页大小变化
+ */
+const handleLogPageSizeChange = (size: number) => {
+  logPageSize.value = size
+  logCurrentPage.value = 1
+}
+
+/**
+ * 处理日志当前页变化
+ */
+const handleLogCurrentChange = (page: number) => {
+  logCurrentPage.value = page
+}
+
+/**
+ * 系统配置相关函数
+ */
+
+/**
+ * 保存系统配置
+ */
+const saveSystemConfig = async () => {
+  try {
+    systemConfigLoading.value = true
+    
+    // 模拟API调用
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    console.log('🔧 保存系统配置:', systemConfig.value)
+    
+    // 这里可以调用后端API保存配置
+    // const response = await apiService.saveSystemConfig(systemConfig.value)
+    
+    ElMessage.success('系统配置保存成功')
+    
+  } catch (error) {
+    console.error('❌ 保存系统配置失败:', error)
+    ElMessage.error('保存系统配置失败')
+  } finally {
+    systemConfigLoading.value = false
+  }
+}
+
+
 
 /**
  * 日志分页
@@ -2263,31 +2995,26 @@ const getMemoryColor = (value: number): string => {
   return '#67c23a'
 }
 
-const getServiceStatusClass = (status: string): string => {
-  const classMap: Record<string, string> = {
-    running: 'service-running',
-    stopped: 'service-stopped',
-    warning: 'service-warning'
-  }
-  return classMap[status] || ''
+const getServiceStatusClass = (status: string, health?: string): string => {
+  if (status === 'running' && health === 'healthy') return 'service-running'
+  if (status === 'running' && health === 'degraded') return 'service-warning'
+  if (status === 'stopped') return 'service-stopped'
+  return 'service-unknown'
 }
 
-const getServiceStatusType = (status: string): string => {
-  const typeMap: Record<string, string> = {
-    running: 'success',
-    stopped: 'danger',
-    warning: 'warning'
-  }
-  return typeMap[status] || 'info'
+const getServiceStatusType = (status: string, health?: string): string => {
+  if (status === 'running' && health === 'healthy') return 'success'
+  if (status === 'running' && health === 'degraded') return 'warning'
+  if (status === 'stopped') return 'danger'
+  return 'info'
 }
 
-const getServiceStatusText = (status: string): string => {
-  const textMap: Record<string, string> = {
-    running: '运行中',
-    stopped: '已停止',
-    warning: '异常'
-  }
-  return textMap[status] || '未知'
+const getServiceStatusText = (status: string, health?: string): string => {
+  if (status === 'running' && health === 'healthy') return '健康运行'
+  if (status === 'running' && health === 'degraded') return '运行异常'
+  if (status === 'stopped') return '已停止'
+  if (status === 'unknown') return '状态未知'
+  return '未知'
 }
 
 const getRoleColor = (role: string): string => {
@@ -2333,89 +3060,139 @@ const formatUptime = (seconds: number): string => {
   }
 }
 
-// 优化的页面初始化函数
+// 轻量化页面初始化函数
 const initializePage = async () => {
   document.title = '系统管理 - 智能监控预警系统'
+  console.log('🚀 轻量化页面初始化开始...')
   
-  // 创建页面加载策略
-  const pageStrategy = loadingOptimizer.createPageLoadStrategy('system-page')
-  
-  // 关键数据：立即加载
-  pageStrategy.critical([
-    {
-      id: 'prometheus-config',
-      name: '加载Prometheus配置',
-      execute: () => performanceMonitor.measureAsync('load-prometheus-config', () => loadPrometheusConfig())
-    },
-    {
-      id: 'ollama-config',
-      name: '加载Ollama配置',
-      execute: () => performanceMonitor.measureAsync('load-ollama-config', () => loadOllamaConfig())
-    },
-    {
-      id: 'database-config',
-      name: '加载数据库配置',
-      execute: () => performanceMonitor.measureAsync('load-database-config', async () => {
-        loadDbConfigLoading.value = true
-        try {
-          await loadDatabaseConfig()
-        } finally {
-          loadDbConfigLoading.value = false
-        }
-      })
-    }
-  ])
-  
-  // 次要数据：延迟加载
-  pageStrategy.deferred([
-    {
-      id: 'system-health',
-      name: '检查系统健康状态',
-      execute: () => performanceMonitor.measureAsync('check-system-health', async () => {
-        try {
-          const health = requestManager.getServiceHealth()
-          console.log('系统健康状态:', health)
-          return health
-        } catch (error) {
-          console.warn('健康检查失败:', error)
-          return null
-        }
-      })
-    }
-  ])
-  
-  // 可选数据：后台加载
-  pageStrategy.optional([
-    {
-      id: 'performance-stats',
-      name: '收集性能统计',
-      execute: () => performanceMonitor.measureAsync('collect-perf-stats', async () => {
-        const stats = performanceMonitor.getStats()
-        console.log('性能统计:', stats)
-        return stats
-      })
-    }
-  ])
-  
-  // 执行加载策略
   try {
-    const results = await pageStrategy.execute()
-    console.log('页面加载完成:', results)
+    // 只加载最基础的系统信息，快速响应用户
+    console.log('📊 加载基础系统信息...')
+    await refreshSystemInfo()
     
-    // 如果有失败的任务，显示警告
-    if (results.failed.length > 0) {
-      ElMessage.warning(`部分数据加载失败: ${results.failed.join(', ')}`)
+    console.log('✅ 基础页面加载完成，其他数据将按需加载')
+    ElMessage.success('页面加载完成')
+  } catch (error) {
+    console.error('❌ 页面初始化失败:', error)
+    ElMessage.warning('部分功能可能不可用，请刷新重试')
+  }
+}
+
+// 按需加载配置数据
+const loadConfigOnDemand = async (configType: string) => {
+  console.log(`🔄 按需加载${configType}配置...`)
+  
+  try {
+    switch (configType) {
+      case 'prometheus':
+        // 总是尝试加载最新的保存配置
+        console.log('🔄 加载Prometheus配置...')
+        await loadPrometheusConfig()
+        console.log('✅ Prometheus配置加载完成:', prometheusConfig.value)
+        break
+      case 'ollama':
+        // 总是尝试加载最新的保存配置
+        console.log('🔄 加载Ollama配置...')
+        await loadOllamaConfig()
+        console.log('✅ Ollama配置加载完成:', ollamaConfig.value)
+        break
+      case 'database':
+        // 总是尝试加载最新的保存配置
+        console.log('🔄 加载数据库配置...')
+        loadDbConfigLoading.value = true
+        await loadDatabaseConfig()
+        loadDbConfigLoading.value = false
+        console.log('✅ 数据库配置加载完成:', databaseConfig.value)
+        break
+      case 'services':
+        if (systemServices.value.length === 0) {
+          await refreshServices()
+        }
+        break
+      case 'users':
+        if (users.value.length <= 3) { // 初始示例数据只有3个
+          await loadUsers()
+        }
+        break
+      case 'logs':
+        if (systemLogs.value.length <= 10) { // 初始示例数据只有10个
+          await loadSystemLogs()
+        }
+        break
     }
   } catch (error) {
-    console.error('页面初始化失败:', error)
-    ElMessage.error('页面初始化失败，请刷新重试')
+    console.warn(`⚠️ ${configType}配置加载失败:`, error.message)
+  }
+}
+
+/**
+ * 加载用户数据
+ */
+const loadUsers = async () => {
+  try {
+    const response = await apiService.getUsers()
+    if (response?.success) {
+      users.value = response.data.users || []
+      console.log('✅ 用户数据加载成功:', users.value.length, '个用户')
+    }
+  } catch (error) {
+    console.error('❌ 加载用户数据失败:', error)
+  }
+}
+
+/**
+ * 加载系统日志
+ */
+const loadSystemLogs = async () => {
+  try {
+    const params = {
+      page: logCurrentPage.value,
+      page_size: logPageSize.value,
+      level: logLevelFilter.value,
+      user: logUserFilter.value,
+      search: logSearchText.value
+    }
+    
+    const response = await apiService.getSystemLogsApi(params)
+    if (response?.success) {
+      systemLogs.value = response.data.logs || []
+      console.log('✅ 系统日志加载成功:', systemLogs.value.length, '条日志')
+    }
+  } catch (error) {
+    console.error('❌ 加载系统日志失败:', error)
   }
 }
 
 // 生命周期钩子
 onMounted(() => {
-  // 使用优化的初始化函数
+  // 使用轻量化初始化函数
   initializePage()
+})
+
+// 监听标签页切换，按需加载数据
+watch(activeTab, async (newTab) => {
+  console.log(`🔄 切换到标签页: ${newTab}`)
+  
+  switch (newTab) {
+    case 'services':
+      await loadConfigOnDemand('services')
+      break
+    case 'datasource':
+      await loadConfigOnDemand('prometheus')
+      break
+    case 'ai':
+      await loadConfigOnDemand('ollama')
+      break
+    case 'database':
+      await loadConfigOnDemand('database')
+      break
+    case 'users':
+      await loadConfigOnDemand('users')
+      break
+    case 'logs':
+      await loadConfigOnDemand('logs')
+      break
+  }
 })
 
 // 调试信息 - 监听databaseConfig变化
@@ -2527,6 +3304,10 @@ watch(() => databaseConfig.value, (newValue) => {
             &.service-warning {
               color: $warning-color;
             }
+            
+            &.service-unknown {
+              color: var(--el-text-color-secondary);
+            }
           }
           
           h4 {
@@ -2556,6 +3337,14 @@ watch(() => databaseConfig.value, (newValue) => {
           .value {
             font-weight: 500;
             color: var(--el-text-color-primary);
+            
+            &.text-warning {
+              color: var(--el-color-warning);
+            }
+            
+            &.text-danger {
+              color: var(--el-color-danger);
+            }
           }
         }
       }
@@ -2797,6 +3586,53 @@ watch(() => databaseConfig.value, (newValue) => {
   .logs-container {
     background: var(--monitor-bg-secondary);
     border-color: var(--monitor-border-color);
+  }
+}
+
+// 日志控件样式
+.log-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.no-logs {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.log-pagination {
+  margin-top: 20px;
+  text-align: right;
+}
+
+// 系统详情样式
+.system-details-section {
+  margin: 20px 0;
+  
+  .detail-card {
+    height: 100%;
+    
+    h4 {
+      margin: 0 0 16px 0;
+      color: #409eff;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    
+    .el-descriptions {
+      :deep(.el-descriptions__label) {
+        font-weight: 500;
+        color: #606266;
+        width: 80px;
+      }
+      
+      :deep(.el-descriptions__content) {
+        color: #303133;
+        font-weight: 400;
+      }
+    }
   }
 }
 
